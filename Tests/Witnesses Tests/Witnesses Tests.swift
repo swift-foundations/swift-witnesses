@@ -16,6 +16,7 @@ import Witnesses
 // MARK: - Test Witness
 
 @Witness
+@WitnessUnimplemented
 struct TestAPI: Sendable {
     var fetch: @Sendable (_ id: Int) async throws -> String
     var update: @Sendable (_ id: Int, _ value: String) async throws -> Void
@@ -142,5 +143,50 @@ struct WitnessUnimplementedTests {
         #expect(error.location.line == 42)
         #expect(error.description.contains("FileSystem.open(path:flags:)"))
         #expect(error.description.contains("not implemented"))
+    }
+
+    @Test("Macro-generated unimplemented throws on invocation")
+    func macroGeneratedUnimplemented() async throws {
+        let api = TestAPI.unimplemented()
+
+        // Calling fetch should throw Witness.Unimplemented.Error
+        await #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try await api.fetch(id: 1)
+        }
+
+        // Calling update should throw Witness.Unimplemented.Error
+        await #expect(throws: Witness.Unimplemented.Error.self) {
+            try await api.update(id: 1, value: "test")
+        }
+    }
+
+    @Test("Macro-generated unimplemented error contains correct info")
+    func macroGeneratedUnimplementedErrorInfo() async throws {
+        let api = TestAPI.unimplemented()
+
+        do {
+            _ = try await api.fetch(id: 1)
+            Issue.record("Expected error to be thrown")
+        } catch let error as Witness.Unimplemented.Error {
+            #expect(error.witness == "TestAPI")
+            #expect(error.operation == "fetch(id:)")
+        }
+    }
+
+    @Test("Unimplemented witness can be partially overridden")
+    func partialOverride() async throws {
+        var api = TestAPI.unimplemented()
+
+        // Override only fetch
+        api.fetch = { id in "Mocked result for \(id)" }
+
+        // fetch works
+        let result = try await api.fetch(id: 42)
+        #expect(result == "Mocked result for 42")
+
+        // update still throws
+        await #expect(throws: Witness.Unimplemented.Error.self) {
+            try await api.update(id: 1, value: "test")
+        }
     }
 }

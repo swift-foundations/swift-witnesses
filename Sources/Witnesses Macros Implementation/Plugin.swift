@@ -10,5 +10,12 @@
 //
 // ===----------------------------------------------------------------------===//
 
-@_exported public import Witness_Macros
-@_exported public import Witnesses_Macros
+import SwiftCompilerPlugin
+import SwiftSyntaxMacros
+
+@main
+struct WitnessesMacrosPlugin: CompilerPlugin {
+    let providingMacros: [any Macro.Type] = [
+        WitnessUnimplementedMacro.self,
+    ]
+}

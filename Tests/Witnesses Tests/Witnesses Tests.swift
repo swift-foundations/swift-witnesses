@@ -16,7 +16,6 @@ import Witnesses
 // MARK: - Test Witness
 
 @Witness
-@WitnessUnimplemented
 struct TestAPI: Sendable {
     var fetch: @Sendable (_ id: Int) async throws -> String
     var update: @Sendable (_ id: Int, _ value: String) async throws -> Void

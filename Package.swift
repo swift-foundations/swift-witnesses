@@ -25,13 +25,15 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0"),
         .package(path: "../../swift-primitives/swift-witness-primitives"),
+        .package(path: "../../swift-primitives/swift-optic-primitives"),
+        .package(path: "../../swift-primitives/swift-finite-primitives"),
     ],
     targets: [
         .target(
             name: "Witnesses",
             dependencies: [
                 "Witnesses Macros",
-                .product(name: "Witness Macros", package: "swift-witness-primitives"),
+                .product(name: "Witness Primitives", package: "swift-witness-primitives"),
             ]
         ),
         .target(
@@ -39,6 +41,8 @@ let package = Package(
             dependencies: [
                 "Witnesses Macros Implementation",
                 .product(name: "Witness Primitives", package: "swift-witness-primitives"),
+                .product(name: "Optic Primitives", package: "swift-optic-primitives"),
+                .product(name: "Finite Primitives", package: "swift-finite-primitives"),
             ]
         ),
         .macro(

@@ -16,6 +16,6 @@ import SwiftSyntaxMacros
 @main
 struct WitnessesMacrosPlugin: CompilerPlugin {
     let providingMacros: [any Macro.Type] = [
-        WitnessUnimplementedMacro.self,
+        WitnessMacro.self,
     ]
 }

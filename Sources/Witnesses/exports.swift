@@ -10,5 +10,4 @@
 //
 // ===----------------------------------------------------------------------===//
 
-@_exported public import Witness_Macros
 @_exported public import Witnesses_Macros

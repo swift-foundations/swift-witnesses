@@ -19,6 +19,59 @@ import SwiftDiagnostics
 
 public struct WitnessMacro {}
 
+// MARK: - Derive Options
+
+/// Represents the derive modes specified in @Witness
+struct DeriveOptions: OptionSet {
+    let rawValue: UInt8
+
+    static let mock = DeriveOptions(rawValue: 1 << 0)
+    // Future: static let spy = DeriveOptions(rawValue: 1 << 1)
+}
+
+/// Parses derive options from the @Witness attribute arguments.
+///
+/// Handles:
+/// - `@Witness` → empty options
+/// - `@Witness(.mock)` → .mock
+/// - `@Witness([.mock, .spy])` → [.mock, .spy]
+private func parseDeriveOptions(from node: AttributeSyntax) -> DeriveOptions {
+    guard let arguments = node.arguments,
+          case .argumentList(let argList) = arguments,
+          let firstArg = argList.first else {
+        return []
+    }
+
+    var options: DeriveOptions = []
+
+    // Handle single member access: .mock
+    if let memberAccess = firstArg.expression.as(MemberAccessExprSyntax.self) {
+        if let option = deriveOption(from: memberAccess.declName.baseName.text) {
+            options.insert(option)
+        }
+    }
+    // Handle array literal: [.mock, .spy]
+    else if let arrayExpr = firstArg.expression.as(ArrayExprSyntax.self) {
+        for element in arrayExpr.elements {
+            if let memberAccess = element.expression.as(MemberAccessExprSyntax.self) {
+                if let option = deriveOption(from: memberAccess.declName.baseName.text) {
+                    options.insert(option)
+                }
+            }
+        }
+    }
+
+    return options
+}
+
+private func deriveOption(from name: String) -> DeriveOptions? {
+    switch name {
+    case "mock": return .mock
+    // Future: case "spy": return .spy
+    default: return nil
+    }
+}
+
 // MARK: - MemberMacro
 
 extension WitnessMacro: MemberMacro {
@@ -171,7 +224,7 @@ extension WitnessMacro: ExtensionMacro {
             extensions.append(prismExt)
         }
 
-        // For structs, generate the unimplemented() extension
+        // For structs, generate the unimplemented() and optionally mock() extensions
         if let structDecl = declaration.as(StructDeclSyntax.self) {
             let closureProperties = extractClosureProperties(from: structDecl)
             if !closureProperties.isEmpty {
@@ -181,6 +234,17 @@ extension WitnessMacro: ExtensionMacro {
                     closureProperties: closureProperties
                 )
                 extensions.append(unimplementedExt)
+
+                // Generate mock() if .mock is specified
+                let deriveOptions = parseDeriveOptions(from: node)
+                if deriveOptions.contains(.mock) {
+                    let mockExt = try generateMockExtension(
+                        for: structDecl,
+                        type: type,
+                        closureProperties: closureProperties
+                    )
+                    extensions.append(mockExt)
+                }
             }
         }
 
@@ -225,6 +289,101 @@ extension WitnessMacro: ExtensionMacro {
             """
         )
     }
+
+    private static func generateMockExtension(
+        for structDecl: StructDeclSyntax,
+        type: some TypeSyntaxProtocol,
+        closureProperties: [ClosureProperty]
+    ) throws -> ExtensionDeclSyntax {
+        let structName = structDecl.name.text
+        let isPublic = structDecl.modifiers.contains { $0.name.tokenKind == .keyword(.public) }
+        let accessModifier = isPublic ? "public " : ""
+
+        // Generate parameters for mock() - takes VALUES, not closures
+        // Void returns get default value of (), non-Void are required
+        let mockParameters = closureProperties.map { property in
+            generateMockParameter(for: property)
+        }.joined(separator: ",\n            ")
+
+        // Generate closure initializers that return the mock values
+        let closureInits = closureProperties.map { property in
+            generateMockClosure(for: property)
+        }.joined(separator: ",\n                ")
+
+        return try ExtensionDeclSyntax(
+            """
+            extension \(type.trimmed) {
+                /// Creates a mock witness with fixed return values.
+                ///
+                /// This is useful for tests where you want simple, predictable values:
+                /// ```swift
+                /// let api = \(raw: structName).mock(fetchUser: testUser)
+                /// ```
+                ///
+                /// For Void-returning operations, the parameter defaults to `()`.
+                @inlinable
+                \(raw: accessModifier)static func mock(
+                    \(raw: mockParameters)
+                ) -> Self {
+                    Self(
+                        \(raw: closureInits)
+                    )
+                }
+            }
+            """
+        )
+    }
+}
+
+// MARK: - Mock Generation Helpers
+
+/// Generates a mock() parameter for a closure property.
+/// - Void return types get a default value of `()`
+/// - Non-Void return types are required parameters
+private func generateMockParameter(for property: ClosureProperty) -> String {
+    let returnType = property.returnType.trimmedDescription
+    let isVoid = returnType == "Void" || returnType == "()"
+
+    if isVoid {
+        return "\(property.name): Void = ()"
+    } else {
+        return "\(property.name): \(returnType)"
+    }
+}
+
+/// Generates a mock closure initializer that returns the mock value.
+private func generateMockClosure(for property: ClosureProperty) -> String {
+    let returnType = property.returnType.trimmedDescription
+    let isVoid = returnType == "Void" || returnType == "()"
+
+    // Include typed throws annotation if present (needed for proper type inference)
+    let throwsAnnotation: String
+    if let throwsType = property.throwsType {
+        throwsAnnotation = "throws(\(throwsType.trimmedDescription)) "
+    } else if property.isThrowing {
+        throwsAnnotation = "throws "
+    } else {
+        throwsAnnotation = ""
+    }
+
+    // Generate closure with appropriate parameter handling
+    // Syntax: { (params) throws(E) -> T in body }
+    if property.parameters.isEmpty {
+        // No parameters: { () throws(E) -> T in value }
+        if isVoid {
+            return "\(property.name): { () \(throwsAnnotation)-> \(returnType) in }"
+        } else {
+            return "\(property.name): { () \(throwsAnnotation)-> \(returnType) in \(property.name) }"
+        }
+    } else {
+        // Has parameters: { (_, _) throws(E) -> T in value }
+        let underscoreParams = property.parameters.map { _ in "_" }.joined(separator: ", ")
+        if isVoid {
+            return "\(property.name): { (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in }"
+        } else {
+            return "\(property.name): { (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in \(property.name) }"
+        }
+    }
 }
 
 // MARK: - Property Extraction
@@ -236,6 +395,8 @@ struct ClosureProperty {
     let hasLabels: Bool
     let isAsync: Bool
     let isThrowing: Bool
+    /// The typed error type if present (e.g., "MyError" from "throws(MyError)")
+    let throwsType: TypeSyntax?
     let returnType: TypeSyntax
 }
 
@@ -262,6 +423,9 @@ private func extractClosureProperties(from structDecl: StructDeclSyntax) -> [Clo
         let parameters = extractParameters(from: functionType)
         let hasLabels = parameters.contains { $0.label != nil }
 
+        // Extract the typed error type from throws clause
+        let throwsType: TypeSyntax? = functionType.effectSpecifiers?.throwsClause?.type
+
         properties.append(ClosureProperty(
             name: identifier.identifier.text,
             functionType: functionType,
@@ -269,6 +433,7 @@ private func extractClosureProperties(from structDecl: StructDeclSyntax) -> [Clo
             hasLabels: hasLabels,
             isAsync: functionType.effectSpecifiers?.asyncSpecifier != nil,
             isThrowing: functionType.effectSpecifiers?.throwsClause != nil,
+            throwsType: throwsType,
             returnType: functionType.returnClause.type
         ))
     }
@@ -445,10 +610,16 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
     // Generate Prisms struct properties
     let prismProperties = generatePrismProperties(for: properties)
 
+    // Generate Action.Result cases with typed Result for each action
+    let resultCases = properties.map { property in
+        generateTypedResultCase(for: property)
+    }.joined(separator: "\n                ")
+
     // Structure:
     // - Action enum has cases for each closure (inputs only)
     // - Action.Case is the enumerable discriminant (no associated values)
-    // - Action.Outcome is a generic struct (action + result)
+    // - Action.Result is a typed enum with Result<Success, Failure> per action
+    // - Action.Outcome pairs an action with its typed result
     // - Action.Prisms provides prisms for each case
     return """
         public enum Action: Sendable {
@@ -484,12 +655,18 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
                 }
             }
 
+            /// Typed result for each action, preserving the specific success and error types.
+            public enum Result: Sendable {
+                \(raw: resultCases)
+            }
+
+            /// An action paired with its typed result.
             public struct Outcome: Sendable {
                 public let action: Action
-                public let result: Swift.Result<any Sendable, any Error>
+                public let result: Result
 
                 @inlinable
-                public init(action: Action, result: Swift.Result<any Sendable, any Error>) {
+                public init(action: Action, result: Result) {
                     self.action = action
                     self.result = result
                 }
@@ -526,6 +703,14 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
             }
         }
         """
+}
+
+/// Generates a typed Result case for a closure property.
+/// e.g., `case fetchUser(Swift.Result<String, Witness.Unimplemented.Error>)`
+private func generateTypedResultCase(for property: ClosureProperty) -> String {
+    let returnType = property.returnType.trimmedDescription
+    let errorType = property.throwsType?.trimmedDescription ?? "Never"
+    return "case \(property.name)(Swift.Result<\(returnType), \(errorType)>)"
 }
 
 /// Generates prism properties for each closure property.
@@ -613,17 +798,31 @@ private func generateUnimplementedClosure(for property: ClosureProperty, structN
     // Build operation signature string for error message
     let operationSignature = buildOperationSignature(for: property)
 
-    // Generate underscore parameters to ignore all inputs
-    let underscoreParams: String
-    if property.parameters.isEmpty {
-        underscoreParams = ""
+    // Include typed throws annotation if present
+    let throwsAnnotation: String
+    if let throwsType = property.throwsType {
+        throwsAnnotation = "throws(\(throwsType.trimmedDescription)) "
+    } else if property.isThrowing {
+        throwsAnnotation = "throws "
     } else {
-        underscoreParams = property.parameters.map { _ in "_" }.joined(separator: ", ")
+        throwsAnnotation = ""
+    }
+
+    let returnType = property.returnType.trimmedDescription
+
+    // Generate closure with explicit typed throws annotation
+    // Syntax: { (params) throws(E) -> T in body }
+    let closureStart: String
+    if property.parameters.isEmpty {
+        closureStart = "{ () \(throwsAnnotation)-> \(returnType) in"
+    } else {
+        let underscoreParams = property.parameters.map { _ in "_" }.joined(separator: ", ")
+        closureStart = "{ (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in"
     }
 
     // All unimplemented closures throw the error
     return """
-\(property.name): { \(underscoreParams) in
+\(property.name): \(closureStart)
                 throw Witness.Unimplemented.Error(
                     witness: "\(structName)",
                     operation: "\(operationSignature)",
@@ -677,7 +876,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], structName
             @inlinable
             public func callAsFunction(
                 _ before: @escaping @Sendable (Action) -> Void,
-                after: @escaping @Sendable (Action, Swift.Result<any Sendable, any Error>) -> Void
+                after: @escaping @Sendable (Action.Outcome) -> Void
             ) -> \(raw: structName) {
                 \(raw: structName)(
                     \(raw: bothClosures)
@@ -718,7 +917,6 @@ private func generateBothObserveClosure(for property: ClosureProperty, structNam
     let parameterNames = property.parameters.enumerated().map { index, param in
         param.label ?? "p\(index)"
     }
-    let closureParams = parameterNames.isEmpty ? "" : parameterNames.joined(separator: ", ")
     let callArgs = parameterNames.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
@@ -728,60 +926,53 @@ private func generateBothObserveClosure(for property: ClosureProperty, structNam
     let hasReturn = returnType != "Void" && returnType != "()"
     let resultValue = hasReturn ? "result" : "()"
 
-    if property.isThrowing {
-        if closureParams.isEmpty {
-            return """
-            \(property.name): { \(captureList) in
-                            let action: Action = \(actionConstruction)
-                            before(action)
-                            do {
-                                \(hasReturn ? "let result = " : "")try \(awaitKeyword)witness.\(property.name)()
-                                after(action, .success(\(resultValue)))
-                                \(hasReturn ? "return result" : "")
-                            } catch {
-                                after(action, .failure(error))
-                                throw error
-                            }
-                        }
-            """
-        } else {
-            return """
-            \(property.name): { \(captureList) \(closureParams) in
-                            let action: Action = \(actionConstruction)
-                            before(action)
-                            do {
-                                \(hasReturn ? "let result = " : "")try \(awaitKeyword)witness.\(property.name)(\(callArgs))
-                                after(action, .success(\(resultValue)))
-                                \(hasReturn ? "return result" : "")
-                            } catch {
-                                after(action, .failure(error))
-                                throw error
-                            }
-                        }
-            """
-        }
+    // Include typed throws annotation if present
+    let throwsAnnotation: String
+    if let throwsType = property.throwsType {
+        throwsAnnotation = "throws(\(throwsType.trimmedDescription)) "
+    } else if property.isThrowing {
+        throwsAnnotation = "throws "
     } else {
-        if closureParams.isEmpty {
-            return """
-            \(property.name): { \(captureList) in
-                            let action: Action = \(actionConstruction)
-                            before(action)
-                            \(hasReturn ? "let result = " : "")\(awaitKeyword)witness.\(property.name)()
-                            after(action, .success(\(resultValue)))
+        throwsAnnotation = ""
+    }
+
+    // Use typed Action.Result case for this property
+    let successResult = "Action.Outcome(action: action, result: .\(property.name)(.success(\(resultValue))))"
+    // For typed throws, cast the error to the specific type (safe since closure is typed)
+    let errorCast = property.throwsType != nil ? "error as! \(property.throwsType!.trimmedDescription)" : "error"
+    let failureResult = "Action.Outcome(action: action, result: .\(property.name)(.failure(\(errorCast))))"
+
+    // Closure params with proper syntax: { [capture] (params) throws(E) -> T in body }
+    let closureParamsWithParens = parameterNames.isEmpty ? "()" : "(\(parameterNames.joined(separator: ", ")))"
+
+    // For typed throws, also cast when rethrowing
+    let throwError = property.throwsType != nil ? "throw \(errorCast)" : "throw error"
+
+    if property.isThrowing {
+        return """
+        \(property.name): { \(captureList) \(closureParamsWithParens) \(throwsAnnotation)-> \(returnType) in
+                        let action: Action = \(actionConstruction)
+                        before(action)
+                        do {
+                            \(hasReturn ? "let result = " : "")try \(awaitKeyword)witness.\(property.name)(\(callArgs))
+                            after(\(successResult))
                             \(hasReturn ? "return result" : "")
+                        } catch {
+                            after(\(failureResult))
+                            \(throwError)
                         }
-            """
-        } else {
-            return """
-            \(property.name): { \(captureList) \(closureParams) in
-                            let action: Action = \(actionConstruction)
-                            before(action)
-                            \(hasReturn ? "let result = " : "")\(awaitKeyword)witness.\(property.name)(\(callArgs))
-                            after(action, .success(\(resultValue)))
-                            \(hasReturn ? "return result" : "")
-                        }
-            """
-        }
+                    }
+        """
+    } else {
+        return """
+        \(property.name): { \(captureList) \(closureParamsWithParens) -> \(returnType) in
+                        let action: Action = \(actionConstruction)
+                        before(action)
+                        \(hasReturn ? "let result = " : "")\(awaitKeyword)witness.\(property.name)(\(callArgs))
+                        after(\(successResult))
+                        \(hasReturn ? "return result" : "")
+                    }
+        """
     }
 }
 
@@ -790,7 +981,6 @@ private func generateBeforeObserveClosure(for property: ClosureProperty, structN
     let parameterNames = property.parameters.enumerated().map { index, param in
         param.label ?? "p\(index)"
     }
-    let closureParams = parameterNames.isEmpty ? "" : parameterNames.joined(separator: ", ")
     let callArgs = parameterNames.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
@@ -801,21 +991,25 @@ private func generateBeforeObserveClosure(for property: ClosureProperty, structN
     let hasReturn = returnType != "Void" && returnType != "()"
     let returnKeyword = hasReturn ? "return " : ""
 
-    if closureParams.isEmpty {
-        return """
-        \(property.name): { \(captureList) in
-                        observer(\(actionConstruction))
-                        \(returnKeyword)\(tryKeyword)\(awaitKeyword)witness.\(property.name)()
-                    }
-        """
+    // Include typed throws annotation if present
+    let throwsAnnotation: String
+    if let throwsType = property.throwsType {
+        throwsAnnotation = "throws(\(throwsType.trimmedDescription)) "
+    } else if property.isThrowing {
+        throwsAnnotation = "throws "
     } else {
-        return """
-        \(property.name): { \(captureList) \(closureParams) in
-                        observer(\(actionConstruction))
-                        \(returnKeyword)\(tryKeyword)\(awaitKeyword)witness.\(property.name)(\(callArgs))
-                    }
-        """
+        throwsAnnotation = ""
     }
+
+    // Closure params with proper syntax: { [capture] (params) throws(E) -> T in body }
+    let closureParamsWithParens = parameterNames.isEmpty ? "()" : "(\(parameterNames.joined(separator: ", ")))"
+
+    return """
+    \(property.name): { \(captureList) \(closureParamsWithParens) \(throwsAnnotation)-> \(returnType) in
+                    observer(\(actionConstruction))
+                    \(returnKeyword)\(tryKeyword)\(awaitKeyword)witness.\(property.name)(\(callArgs))
+                }
+    """
 }
 
 private func generateAfterObserveClosure(for property: ClosureProperty, structName: String) -> String {
@@ -823,7 +1017,6 @@ private func generateAfterObserveClosure(for property: ClosureProperty, structNa
     let parameterNames = property.parameters.enumerated().map { index, param in
         param.label ?? "p\(index)"
     }
-    let closureParams = parameterNames.isEmpty ? "" : parameterNames.joined(separator: ", ")
     let callArgs = parameterNames.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
@@ -833,56 +1026,51 @@ private func generateAfterObserveClosure(for property: ClosureProperty, structNa
     let hasReturn = returnType != "Void" && returnType != "()"
     let resultValue = hasReturn ? "result" : "()"
 
-    if property.isThrowing {
-        if closureParams.isEmpty {
-            return """
-            \(property.name): { \(captureList) in
-                            let action: Action = \(actionConstruction)
-                            do {
-                                \(hasReturn ? "let result = " : "")try \(awaitKeyword)witness.\(property.name)()
-                                observer(Action.Outcome(action: action, result: .success(\(resultValue))))
-                                \(hasReturn ? "return result" : "")
-                            } catch {
-                                observer(Action.Outcome(action: action, result: .failure(error)))
-                                throw error
-                            }
-                        }
-            """
-        } else {
-            return """
-            \(property.name): { \(captureList) \(closureParams) in
-                            let action: Action = \(actionConstruction)
-                            do {
-                                \(hasReturn ? "let result = " : "")try \(awaitKeyword)witness.\(property.name)(\(callArgs))
-                                observer(Action.Outcome(action: action, result: .success(\(resultValue))))
-                                \(hasReturn ? "return result" : "")
-                            } catch {
-                                observer(Action.Outcome(action: action, result: .failure(error)))
-                                throw error
-                            }
-                        }
-            """
-        }
+    // Include typed throws annotation if present
+    let throwsAnnotation: String
+    if let throwsType = property.throwsType {
+        throwsAnnotation = "throws(\(throwsType.trimmedDescription)) "
+    } else if property.isThrowing {
+        throwsAnnotation = "throws "
     } else {
-        if closureParams.isEmpty {
-            return """
-            \(property.name): { \(captureList) in
-                            let action: Action = \(actionConstruction)
-                            \(hasReturn ? "let result = " : "")\(awaitKeyword)witness.\(property.name)()
-                            observer(Action.Outcome(action: action, result: .success(\(resultValue))))
+        throwsAnnotation = ""
+    }
+
+    // Use typed Action.Result case for this property
+    let successResult = "Action.Outcome(action: action, result: .\(property.name)(.success(\(resultValue))))"
+    // For typed throws, cast the error to the specific type (safe since closure is typed)
+    let errorCast = property.throwsType != nil ? "error as! \(property.throwsType!.trimmedDescription)" : "error"
+    let failureResult = "Action.Outcome(action: action, result: .\(property.name)(.failure(\(errorCast))))"
+
+    // Closure params with proper syntax: { [capture] (params) throws(E) -> T in body }
+    let closureParamsWithParens = parameterNames.isEmpty ? "()" : "(\(parameterNames.joined(separator: ", ")))"
+
+    // For typed throws, also cast when rethrowing
+    let throwError = property.throwsType != nil ? "throw \(errorCast)" : "throw error"
+
+    if property.isThrowing {
+        return """
+        \(property.name): { \(captureList) \(closureParamsWithParens) \(throwsAnnotation)-> \(returnType) in
+                        let action: Action = \(actionConstruction)
+                        do {
+                            \(hasReturn ? "let result = " : "")try \(awaitKeyword)witness.\(property.name)(\(callArgs))
+                            observer(\(successResult))
                             \(hasReturn ? "return result" : "")
+                        } catch {
+                            observer(\(failureResult))
+                            \(throwError)
                         }
-            """
-        } else {
-            return """
-            \(property.name): { \(captureList) \(closureParams) in
-                            let action: Action = \(actionConstruction)
-                            \(hasReturn ? "let result = " : "")\(awaitKeyword)witness.\(property.name)(\(callArgs))
-                            observer(Action.Outcome(action: action, result: .success(\(resultValue))))
-                            \(hasReturn ? "return result" : "")
-                        }
-            """
-        }
+                    }
+        """
+    } else {
+        return """
+        \(property.name): { \(captureList) \(closureParamsWithParens) -> \(returnType) in
+                        let action: Action = \(actionConstruction)
+                        \(hasReturn ? "let result = " : "")\(awaitKeyword)witness.\(property.name)(\(callArgs))
+                        observer(\(successResult))
+                        \(hasReturn ? "return result" : "")
+                    }
+        """
     }
 }
 

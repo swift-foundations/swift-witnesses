@@ -14,6 +14,55 @@
 @_exported public import Optic_Primitives
 @_exported public import Finite_Primitives
 
+// MARK: - Witness.Derive
+
+extension Witness {
+    /// Options for deriving additional witness infrastructure.
+    ///
+    /// Pass these to `@Witness` to generate specialized test doubles:
+    ///
+    /// ```swift
+    /// @Witness(.mock)
+    /// struct APIClient: Sendable {
+    ///     var fetchUser: (_ id: Int) async throws -> User
+    /// }
+    ///
+    /// // Now you can create mocks with fixed return values:
+    /// let api = APIClient.mock(fetchUser: User(id: 1, name: "Test"))
+    /// ```
+    ///
+    /// Multiple modes can be combined:
+    /// ```swift
+    /// @Witness([.mock, .spy])
+    /// struct APIClient { ... }
+    /// ```
+    public struct Derive: OptionSet, Sendable, Hashable {
+        public let rawValue: UInt8
+
+        @inlinable
+        public init(rawValue: UInt8) {
+            self.rawValue = rawValue
+        }
+
+        /// Generate a `mock()` method that takes return values instead of closures.
+        ///
+        /// For Void-returning closures, the parameter has a default value of `()`.
+        /// For non-Void closures, you must provide the return value.
+        ///
+        /// ```swift
+        /// @Witness(.mock)
+        /// struct API: Sendable {
+        ///     var fetchUser: (_ id: Int) async throws -> User
+        ///     var deleteUser: (_ id: Int) async throws -> Void
+        /// }
+        ///
+        /// // Usage - provide values, not closures:
+        /// let api = API.mock(fetchUser: testUser)  // deleteUser defaults to ()
+        /// ```
+        public static let mock = Derive(rawValue: 1 << 0)
+    }
+}
+
 /// Generates protocol witness infrastructure for a struct with closure properties.
 ///
 /// Apply `@Witness` to a struct containing closure properties to automatically generate:
@@ -103,8 +152,41 @@
 /// ```
 @attached(member, names: arbitrary)
 @attached(memberAttribute)
-@attached(extension, conformances: Witness_Primitives.__WitnessProtocol, Optic_Primitives.__OpticPrismAccessible, names: named(unimplemented))
+@attached(extension, conformances: Witness_Primitives.__WitnessProtocol, Optic_Primitives.__OpticPrismAccessible, names: named(unimplemented), named(mock))
 public macro Witness() = #externalMacro(
+    module: "Witnesses_Macros_Implementation",
+    type: "WitnessMacro"
+)
+
+/// Generates protocol witness infrastructure with additional derive modes.
+///
+/// ## Mock Mode
+///
+/// Use `@Witness(.mock)` to generate a `mock()` method that takes return values:
+///
+/// ```swift
+/// @Witness(.mock)
+/// struct APIClient: Sendable {
+///     var fetchUser: (_ id: Int) async throws -> User
+///     var deleteUser: (_ id: Int) async throws -> Void
+/// }
+///
+/// // Create mock with fixed return values (no closures needed):
+/// let api = APIClient.mock(fetchUser: User(id: 1, name: "Test"))
+/// // deleteUser defaults to () since it returns Void
+/// ```
+///
+/// Multiple modes can be combined:
+/// ```swift
+/// @Witness([.mock, .spy])
+/// struct APIClient { ... }
+/// ```
+///
+/// - Parameter derive: The derive modes to enable (e.g., `.mock`, `[.mock, .spy]`).
+@attached(member, names: arbitrary)
+@attached(memberAttribute)
+@attached(extension, conformances: Witness_Primitives.__WitnessProtocol, Optic_Primitives.__OpticPrismAccessible, names: named(unimplemented), named(mock))
+public macro Witness(_ derive: Witness.Derive) = #externalMacro(
     module: "Witnesses_Macros_Implementation",
     type: "WitnessMacro"
 )

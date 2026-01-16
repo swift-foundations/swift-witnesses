@@ -17,8 +17,17 @@ import Witnesses
 
 @Witness
 struct TestAPI: Sendable {
-    var fetch: @Sendable (_ id: Int) async throws -> String
-    var update: @Sendable (_ id: Int, _ value: String) async throws -> Void
+    var fetch: @Sendable (_ id: Int) async throws(Witness.Unimplemented.Error) -> String
+    var update: @Sendable (_ id: Int, _ value: String) async throws(Witness.Unimplemented.Error) -> Void
+}
+
+// MARK: - Test Witness with Mock Derive
+
+@Witness(.mock)
+struct MockableAPI: Sendable {
+    var fetchUser: @Sendable (_ id: Int) async throws(Witness.Unimplemented.Error) -> String
+    var getCount: @Sendable () throws(Witness.Unimplemented.Error) -> Int
+    var deleteUser: @Sendable (_ id: Int) async throws(Witness.Unimplemented.Error) -> Void
 }
 
 extension TestAPI: Witness.Key {
@@ -186,6 +195,77 @@ struct WitnessUnimplementedTests {
         // update still throws
         await #expect(throws: Witness.Unimplemented.Error.self) {
             try await api.update(id: 1, value: "test")
+        }
+    }
+}
+
+@Suite("Witness.Derive.mock")
+struct WitnessMockTests {
+    @Test("Mock generates static method with value parameters")
+    func mockMethodExists() async throws {
+        // mock() takes values, not closures
+        let api = MockableAPI.mock(
+            fetchUser: "Test User",
+            getCount: 42
+            // deleteUser defaults to () since it returns Void
+        )
+
+        // Values are returned regardless of input
+        let user = try await api.fetchUser(id: 999)
+        #expect(user == "Test User")
+
+        let count = try api.getCount()
+        #expect(count == 42)
+
+        // Void operations just work
+        try await api.deleteUser(id: 1)
+    }
+
+    @Test("Mock with all explicit values")
+    func mockWithAllValues() async throws {
+        let api = MockableAPI.mock(
+            fetchUser: "Explicit User",
+            getCount: 100,
+            deleteUser: ()
+        )
+
+        let user = try await api.fetchUser(id: 1)
+        #expect(user == "Explicit User")
+
+        let count = try api.getCount()
+        #expect(count == 100)
+    }
+
+    @Test("Mock returns same value for any input")
+    func mockReturnsSameValue() async throws {
+        let api = MockableAPI.mock(
+            fetchUser: "Always This",
+            getCount: 0
+        )
+
+        // Same value regardless of id
+        let user1 = try await api.fetchUser(id: 1)
+        let user2 = try await api.fetchUser(id: 999)
+        let user3 = try await api.fetchUser(id: -1)
+
+        #expect(user1 == "Always This")
+        #expect(user2 == "Always This")
+        #expect(user3 == "Always This")
+    }
+
+    @Test("Mock also has unimplemented available")
+    func mockStillHasUnimplemented() async throws {
+        // Both mock() and unimplemented() are available
+        let mockApi = MockableAPI.mock(fetchUser: "Test", getCount: 0)
+        let unimplApi = MockableAPI.unimplemented()
+
+        // Mock works
+        let result = try await mockApi.fetchUser(id: 1)
+        #expect(result == "Test")
+
+        // Unimplemented throws
+        await #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try await unimplApi.fetchUser(id: 1)
         }
     }
 }

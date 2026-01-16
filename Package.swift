@@ -27,6 +27,7 @@ let package = Package(
         .package(path: "../../swift-primitives/swift-witness-primitives"),
         .package(path: "../../swift-primitives/swift-optic-primitives"),
         .package(path: "../../swift-primitives/swift-finite-primitives"),
+        .package(path: "../swift-testing-extras"),
     ],
     targets: [
         .target(
@@ -58,6 +59,7 @@ let package = Package(
             name: "Witnesses Tests",
             dependencies: [
                 "Witnesses",
+                .product(name: "Testing Extras", package: "swift-testing-extras"),
             ],
             path: "Tests/Witnesses Tests"
         ),

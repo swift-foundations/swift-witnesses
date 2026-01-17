@@ -56,14 +56,16 @@ public func withWitnesses<T, E: Error>(
 /// Per [API-ERR-001], typed errors are preserved through the operation.
 ///
 /// - Parameters:
+///   - isolation: The actor isolation context for the operation.
 ///   - modify: A closure that modifies the witness values for the scope.
 ///   - operation: The async operation to execute with the modified values.
 /// - Returns: The result of the operation.
 /// - Throws: The typed error from the operation.
 @inlinable
 public func withWitnesses<T, E: Error>(
+    isolation: isolated (any Actor)? = #isolation,
     _ modify: (inout Witness.Values) -> Void,
     operation: () async throws(E) -> T
 ) async throws(E) -> T {
-    try await Witness.Context.with(modify, operation: operation)
+    try await Witness.Context.with(isolation: isolation, modify, operation: operation)
 }

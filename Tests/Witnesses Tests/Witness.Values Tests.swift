@@ -41,25 +41,27 @@ extension Witness.Values.Test.Unit {
         #expect(customResult == "Custom result for 1")
     }
 
-    @Test("Test context returns testValue by default")
-    func testContext() async throws {
-        let values = Witness.Values(isTestContext: true)
-
-        let api = values[TestAPI.self]
-        let result = try await api.fetch(id: 1)
-        #expect(result == "Test result for 1")
+    @Test("Test mode returns testValue by default")
+    func testMode() async throws {
+        // Use Witness.Context with test mode to get testValue
+        await Witness.Context.withTest {
+            let api = Witness.Context[TestAPI.self]
+            Task {
+                let result = try await api.fetch(id: 1)
+                #expect(result == "Test result for 1")
+            }
+        }
     }
 
-    @Test("Production context returns liveValue by default")
-    func productionContext() async throws {
-        let values = Witness.Values(isTestContext: false)
-
-        let api = values[TestAPI.self]
+    @Test("Live mode returns liveValue by default")
+    func liveMode() async throws {
+        // Default mode is live
+        let api = Witness.Context[TestAPI.self]
         let result = try await api.fetch(id: 1)
         #expect(result == "Live result for 1")
     }
 
-    @Test("Default init creates production context")
+    @Test("Default init creates live context")
     func defaultInit() async throws {
         let values = Witness.Values()
 
@@ -112,7 +114,7 @@ extension Witness.Values.Test.EdgeCase {
 extension Witness.Values.Test.Performance {
     @Test("Subscript access", .timed(iterations: 1000, warmup: 100))
     func subscriptAccess() async throws {
-        var values = Witness.Values()
+        let values = Witness.Values()
         for _ in 0..<100 {
             _ = values[TestAPI.self]
         }

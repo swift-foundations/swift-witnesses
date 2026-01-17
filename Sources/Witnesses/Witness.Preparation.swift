@@ -11,58 +11,84 @@
 // ===----------------------------------------------------------------------===//
 
 import Witness_Primitives
-import Synchronization
 
 extension Witness {
-    /// Namespace for one-time witness preparation infrastructure.
+    /// Namespace for witness preparation infrastructure.
     ///
-    /// Use `Witness.Preparation` to configure witnesses globally before first access.
+    /// Use `Witness.Preparation` to configure witnesses for a scope before first access.
     /// This is useful for app startup where you want to set up live implementations
-    /// once and have them available throughout the app lifecycle.
+    /// and have them available throughout the operation.
     ///
-    /// ## Example
+    /// ## Design
+    ///
+    /// Per [API-IMPL-010] (no hidden global mutable storage), this uses `@TaskLocal`
+    /// rather than a global `Mutex`. The store is scoped to the current task tree
+    /// and automatically cleaned up.
+    ///
+    /// ## Usage
     ///
     /// ```swift
-    /// @main
-    /// struct MyApp: App {
-    ///     init() {
-    ///         Witness.Preparation.prepare { values in
-    ///             values[APIClient.self] = .live(baseURL: configuration.apiURL)
-    ///             values[Database.self] = .sqlite(path: configuration.dbPath)
-    ///             values[Logger.self] = .osLog
-    ///         }
-    ///     }
-    ///
-    ///     var body: some Scene { ... }
+    /// await Witness.Preparation.with { store in
+    ///     store.set(APIClient.self, value: .live(baseURL: configuration.apiURL))
+    ///     store.set(Database.self, value: .sqlite(path: configuration.dbPath))
+    /// } operation: {
+    ///     // Within this scope, these values are available
+    ///     let client = Witness.Context[APIClient.self]
     /// }
     /// ```
     ///
     /// ## Notes
     ///
-    /// - `prepare` can only be called once; subsequent calls will trigger a precondition failure
-    /// - Prepared values are used as defaults when not overridden by `Witness.Context.with`
-    /// - For scoped overrides, use `Witness.Context.with` or `withWitnesses` instead
+    /// - Prepared values are available within the scope and inherited by child tasks
+    /// - Scoped API per [API-IMPL-010] - no global one-shot mutation
+    /// - For explicit overrides, use `Witness.Context.with` or `withWitnesses` instead
     public enum Preparation {
-        /// Thread-safe storage for prepared values.
-        private static let _storage = Mutex<Witness.Values?>(nil)
+        /// TaskLocal storage for the current preparation store.
+        @TaskLocal
+        internal static var store: Store?
 
-        /// Prepare witnesses globally (one-time, before first access).
-        ///
-        /// - Parameter configure: A closure that configures the witness values.
-        public static func prepare(
-            _ configure: (inout Witness.Values) -> Void
-        ) {
-            _storage.withLock { stored in
-                precondition(stored == nil, "Witnesses already prepared. Witness.Preparation.prepare can only be called once.")
-                var values = Witness.Values()
-                configure(&values)
-                stored = values
-            }
+        /// The current preparation store, if any.
+        public static var current: Store? {
+            store
         }
+    }
+}
 
-        /// Returns the prepared values, if any.
-        public static var values: Witness.Values? {
-            _storage.withLock { $0 }
-        }
+// MARK: - Scoped API
+
+extension Witness.Preparation {
+    /// Executes an operation with prepared witness values.
+    ///
+    /// The store is available within the scope and to all child tasks.
+    /// Values set in the store are used as fallbacks when resolving witnesses.
+    ///
+    /// - Parameters:
+    ///   - configure: A closure that configures the preparation store.
+    ///   - operation: The operation to execute with prepared values.
+    /// - Returns: The result of the operation.
+    /// - Throws: Rethrows any error from the operation.
+    public static func with<T>(
+        _ configure: (Store) -> Void,
+        operation: () async throws -> T
+    ) async rethrows -> T {
+        let newStore = Store()
+        configure(newStore)
+        return try await $store.withValue(newStore, operation: operation)
+    }
+
+    /// Executes an operation with prepared witness values (synchronous).
+    ///
+    /// - Parameters:
+    ///   - configure: A closure that configures the preparation store.
+    ///   - operation: The operation to execute with prepared values.
+    /// - Returns: The result of the operation.
+    /// - Throws: Rethrows any error from the operation.
+    public static func with<T>(
+        _ configure: (Store) -> Void,
+        operation: () throws -> T
+    ) rethrows -> T {
+        let newStore = Store()
+        configure(newStore)
+        return try $store.withValue(newStore, operation: operation)
     }
 }

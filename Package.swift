@@ -4,7 +4,7 @@ import PackageDescription
 import CompilerPluginSupport
 
 let package = Package(
-    name: "swift-witnessess",
+    name: "swift-witnesses",
     platforms: [
         .macOS(.v26),
         .iOS(.v26),
@@ -28,6 +28,7 @@ let package = Package(
         .package(path: "../../swift-primitives/swift-optic-primitives"),
         .package(path: "../../swift-primitives/swift-finite-primitives"),
         .package(path: "../../swift-primitives/swift-reference-primitives"),
+        .package(path: "../../swift-primitives/swift-cache-primitives"),
         .package(path: "../swift-testing-extras"),
     ],
     targets: [
@@ -37,6 +38,7 @@ let package = Package(
                 "Witnesses Macros",
                 .product(name: "Witness Primitives", package: "swift-witness-primitives"),
                 .product(name: "Reference Primitives", package: "swift-reference-primitives"),
+                .product(name: "Cache Primitives", package: "swift-cache-primitives"),
             ]
         ),
         .target(

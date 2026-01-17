@@ -48,11 +48,10 @@ extension Witness.Context.Test.Unit {
 
     @Test("Test context provides testValue")
     func testContextScope() async throws {
-        try await Witness.Context.withTest { values in
-            // Don't override, just use test defaults
-        } operation: {
-            let api = Witness.Context.current[TestAPI.self]
-            let result = try await api.fetch(id: 1)
+        await Witness.Context.withTest {
+            // Use Witness.Context[key] to get mode-aware access
+            let api = Witness.Context[TestAPI.self]
+            let result = try? await api.fetch(id: 1)
             #expect(result == "Test result for 1")
         }
     }

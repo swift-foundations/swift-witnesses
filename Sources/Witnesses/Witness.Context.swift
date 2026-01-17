@@ -27,6 +27,19 @@ extension Witness {
     /// }
     /// ```
     ///
+    /// ## Execution Mode
+    ///
+    /// Per [API-IMPL-002], mode is a state machine enum rather than a boolean.
+    /// Use mode-aware context methods:
+    ///
+    /// ```swift
+    /// Witness.Context.with(mode: .test) { values in
+    ///     // values now resolve to testValue by default
+    /// } operation: {
+    ///     // ...
+    /// }
+    /// ```
+    ///
     /// ## Accessing Current Values
     ///
     /// Within a scope, access the current witness values:
@@ -37,14 +50,24 @@ extension Witness {
     public struct Context: Sendable {
         /// Task-local storage for the current context.
         @TaskLocal
-        private static var _current: Context = Context(values: Values())
+        private static var _current: Context = Context(values: Values(), mode: .live)
 
         /// The witness values in this context.
         public var values: Values
 
+        /// The execution mode for this context.
+        ///
+        /// Determines which default value is used when a key is not
+        /// explicitly overridden:
+        /// - `.live`: Uses `liveValue`
+        /// - `.preview`: Uses `previewValue`
+        /// - `.test`: Uses `testValue`
+        public var mode: Mode
+
         @usableFromInline
-        internal init(values: Values) {
+        internal init(values: Values, mode: Mode) {
             self.values = values
+            self.mode = mode
         }
     }
 }
@@ -58,6 +81,39 @@ extension Witness.Context {
     /// or the default values if not in a scope.
     public static var current: Witness.Values {
         _current.values
+    }
+
+    /// The current execution mode for this task.
+    ///
+    /// Returns the mode from the innermost scope, or `.live` if not in a scope.
+    public static var currentMode: Mode {
+        _current.mode
+    }
+}
+
+// MARK: - Value Access (Total API)
+
+extension Witness.Context {
+    /// Gets the current value for a key, with explicit mode.
+    ///
+    /// This is a convenience method that uses the current context's mode.
+    ///
+    /// - Parameter key: The key type to look up.
+    /// - Returns: The resolved value for the key.
+    public static subscript<K: Witness.Key>(key: K.Type) -> K.Value {
+        _current.values.value(for: key, mode: _current.mode)
+    }
+
+    /// Gets the value for a key with full resolution (total API).
+    ///
+    /// Per [API-IMPL-003], this returns a `Result` rather than throwing or trapping.
+    /// Currently returns `.success` always since basic lookup cannot fail.
+    /// Future: will integrate cycle detection via `Resolution.Stack`.
+    ///
+    /// - Parameter key: The key type to resolve.
+    /// - Returns: A result containing the resolved value or a resolution error.
+    public static func value<K: Witness.Key>(_ key: K.Type) -> Result<K.Value, Witness.Resolution.Error> {
+        .success(_current.values.value(for: key, mode: _current.mode))
     }
 }
 
@@ -87,6 +143,31 @@ extension Witness.Context {
             }
         }.get()
     }
+
+    /// Executes a closure with modified witness values and mode.
+    ///
+    /// - Parameters:
+    ///   - mode: The execution mode for the scope.
+    ///   - modify: A closure that modifies the witness values for the scope.
+    ///   - operation: The operation to execute with the modified values.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    public static func with<T, E: Error>(
+        mode: Mode,
+        _ modify: ((inout Witness.Values) -> Void)? = nil,
+        operation: () throws(E) -> T
+    ) throws(E) -> T {
+        var context = _current
+        context.mode = mode
+        modify?(&context.values)
+        return try $_current.withValue(context) {
+            do throws(E) {
+                return Result<T, E>.success(try operation())
+            } catch {
+                return Result<T, E>.failure(error)
+            }
+        }.get()
+    }
 }
 
 // MARK: - Scoped Override (Asynchronous)
@@ -94,14 +175,19 @@ extension Witness.Context {
 extension Witness.Context {
     /// Executes an async closure with modified witness values.
     ///
+    /// This overload preserves actor isolation, allowing the operation to run
+    /// in the caller's isolation context.
+    ///
     /// Per [API-ERR-003], typed errors are preserved by construction via Result.
     ///
     /// - Parameters:
+    ///   - isolation: The actor isolation context for the operation.
     ///   - modify: A closure that modifies the witness values for the scope.
     ///   - operation: The async operation to execute with the modified values.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
     public static func with<T, E: Error>(
+        isolation: isolated (any Actor)? = #isolation,
         _ modify: (inout Witness.Values) -> Void,
         operation: () async throws(E) -> T
     ) async throws(E) -> T {
@@ -115,14 +201,41 @@ extension Witness.Context {
             }
         }.get()
     }
+
+    /// Executes an async closure with modified witness values and mode.
+    ///
+    /// - Parameters:
+    ///   - isolation: The actor isolation context for the operation.
+    ///   - mode: The execution mode for the scope.
+    ///   - modify: A closure that modifies the witness values for the scope.
+    ///   - operation: The async operation to execute with the modified values.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    public static func with<T, E: Error>(
+        isolation: isolated (any Actor)? = #isolation,
+        mode: Mode,
+        _ modify: ((inout Witness.Values) -> Void)? = nil,
+        operation: () async throws(E) -> T
+    ) async throws(E) -> T {
+        var context = _current
+        context.mode = mode
+        modify?(&context.values)
+        return try await $_current.withValue(context) {
+            do throws(E) {
+                return Result<T, E>.success(try await operation())
+            } catch {
+                return Result<T, E>.failure(error)
+            }
+        }.get()
+    }
 }
 
-// MARK: - Test Context
+// MARK: - Mode-Specific Contexts
 
 extension Witness.Context {
-    /// Executes a closure in a test context.
+    /// Executes a closure in test mode.
     ///
-    /// In a test context, unset keys return their `testValue` instead of `liveValue`.
+    /// In test mode, unset keys return their `testValue`.
     ///
     /// - Parameters:
     ///   - modify: An optional closure to further modify values.
@@ -134,7 +247,26 @@ extension Witness.Context {
         operation: () async throws -> T
     ) async rethrows -> T {
         var context = _current
-        context.values.isTestContext = true
+        context.mode = .test
+        modify?(&context.values)
+        return try await $_current.withValue(context, operation: operation)
+    }
+
+    /// Executes a closure in preview mode.
+    ///
+    /// In preview mode, unset keys return their `previewValue`.
+    ///
+    /// - Parameters:
+    ///   - modify: An optional closure to further modify values.
+    ///   - operation: The preview operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: Rethrows any error from the operation.
+    public static func withPreview<T>(
+        _ modify: ((inout Witness.Values) -> Void)? = nil,
+        operation: () async throws -> T
+    ) async rethrows -> T {
+        var context = _current
+        context.mode = .preview
         modify?(&context.values)
         return try await $_current.withValue(context, operation: operation)
     }

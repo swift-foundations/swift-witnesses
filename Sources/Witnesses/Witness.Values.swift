@@ -24,8 +24,17 @@ extension Witness {
     /// let fs = values[FileSystem.self]  // FileSystem
     /// ```
     ///
-    /// Values not explicitly set will return their key's `liveValue` or `testValue`
-    /// depending on the current context.
+    /// ## Lookup Order
+    ///
+    /// When accessing a value, the lookup order is:
+    /// 1. Explicit overrides (stored in `_storage`)
+    /// 2. Prepared values (from `Witness.Preparation.Store`)
+    /// 3. Default value (based on mode: `liveValue`, `previewValue`, or `testValue`)
+    ///
+    /// ## Mode
+    ///
+    /// The execution mode is now part of ``Witness/Context`` rather than `Values`.
+    /// Per [API-IMPL-002], mode is a state machine enum rather than a boolean.
     public struct Values: Sendable {
         /// Internal storage with proper memory cleanup.
         /// Uses UnsafeRawPointer to avoid existential overhead (8 bytes vs 40 bytes per entry).
@@ -54,21 +63,28 @@ extension Witness {
             }
         }
 
-        /// Storage using type identifier as key with UnsafeRawPointer values.
+        /// Storage for explicit overrides using type identifier as key with UnsafeRawPointer values.
         @usableFromInline
         internal var _storage: _Storage
 
-        /// Whether we're in a test context.
+        /// Reference to prepared values store.
         @usableFromInline
-        internal var isTestContext: Bool
+        internal var _preparedRef: Witness.Preparation.Store?
 
         /// Creates an empty values container.
-        ///
-        /// - Parameter isTestContext: If `true`, unset keys return `testValue` instead of `liveValue`.
         @inlinable
-        public init(isTestContext: Bool = false) {
+        public init() {
             self._storage = _Storage()
-            self.isTestContext = isTestContext
+            self._preparedRef = nil
+        }
+
+        /// Creates a values container with a reference to prepared values.
+        ///
+        /// - Parameter preparedStore: The preparation store to use for lookups.
+        @usableFromInline
+        internal init(preparedStore: Witness.Preparation.Store?) {
+            self._storage = _Storage()
+            self._preparedRef = preparedStore
         }
     }
 }
@@ -80,7 +96,7 @@ extension Witness.Values {
         if !isKnownUniquelyReferenced(&_storage) {
             let newStorage = _Storage()
             // Copy all entries (retaining each box)
-            for key in _storage.dict.keys {
+            for key in unsafe _storage.dict.keys {
                 if let ptr = unsafe _storage.dict[key] {
                     _ = unsafe Unmanaged<AnyObject>.fromOpaque(ptr).retain()
                     unsafe newStorage.set(ptr, for: key)
@@ -90,18 +106,52 @@ extension Witness.Values {
         }
     }
 
+    /// Accesses the witness for the given key type using the specified mode.
+    ///
+    /// This internal method performs the lookup with explicit mode.
+    ///
+    /// - Parameters:
+    ///   - key: The key type identifying the witness.
+    ///   - mode: The execution mode determining default value selection.
+    /// - Returns: The stored witness, or the key's default value based on mode.
+    @usableFromInline
+    internal func value<K: Witness.Key>(for key: K.Type, mode: Witness.Context.Mode) -> K.Value {
+        let id = ObjectIdentifier(K.self)
+
+        // 1. Check explicit overrides
+        if let ptr = unsafe _storage.dict[id] {
+            return unsafe Unmanaged<Reference.Box<K.Value>>.fromOpaque(ptr)
+                .takeUnretainedValue()
+                .value
+        }
+
+        // 2. Check prepared values
+        if let prepared = _preparedRef?.get(K.self) {
+            return prepared
+        }
+
+        // 3. Return default based on mode
+        switch mode {
+        case .live:
+            return K.liveValue
+        case .preview:
+            return K.previewValue
+        case .test:
+            return K.testValue
+        }
+    }
+
     /// Accesses the witness for the given key type.
     ///
+    /// For get operations, uses `.live` mode by default. For mode-aware access,
+    /// use ``Witness/Context`` which provides the current mode.
+    ///
     /// - Parameter key: The key type identifying the witness.
-    /// - Returns: The stored witness, or the key's default value if not set.
+    /// - Returns: The stored witness, or the key's `liveValue` if not set.
     @inlinable
     public subscript<K: Witness.Key>(key: K.Type) -> K.Value {
         get {
-            let id = ObjectIdentifier(K.self)
-            if let ptr = unsafe _storage.dict[id] {
-                return unsafe Unmanaged<Reference.Box<K.Value>>.fromOpaque(ptr).takeUnretainedValue().value
-            }
-            return isTestContext ? K.testValue : K.liveValue
+            value(for: key, mode: .live)
         }
         set {
             _ensureUnique()
@@ -124,7 +174,9 @@ extension Witness.Values {
     /// - Returns: A new values container with merged values.
     @safe
     public func merging(_ other: Witness.Values) -> Witness.Values {
-        let result = Witness.Values(isTestContext: self.isTestContext || other.isTestContext)
+        var result = Witness.Values()
+        // Use prepared ref from other if present, otherwise from self
+        result._preparedRef = other._preparedRef ?? self._preparedRef
         // Copy self's values using the internal copy method
         result._storage.copyFrom(_storage)
         // Override with other's values

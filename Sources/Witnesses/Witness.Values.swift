@@ -122,27 +122,29 @@ extension Witness.Values {
     /// Values from `other` override values in `self`.
     /// - Parameter other: The values to merge in.
     /// - Returns: A new values container with merged values.
-    @inlinable
+    @safe
     public func merging(_ other: Witness.Values) -> Witness.Values {
-        var result = Witness.Values(isTestContext: self.isTestContext || other.isTestContext)
-        // Copy self's values
-        for key in _storage.dict.keys {
-            if let ptr = unsafe _storage.dict[key] {
-                _ = unsafe Unmanaged<AnyObject>.fromOpaque(ptr).retain()
-                unsafe result._storage.set(ptr, for: key)
-            }
-        }
+        let result = Witness.Values(isTestContext: self.isTestContext || other.isTestContext)
+        // Copy self's values using the internal copy method
+        result._storage.copyFrom(_storage)
         // Override with other's values
-        for key in other._storage.dict.keys {
-            if let ptr = unsafe other._storage.dict[key] {
-                // Release old value if present in result
-                if let oldPtr = unsafe result._storage.dict[key] {
+        result._storage.copyFrom(other._storage)
+        return result
+    }
+}
+
+extension Witness.Values._Storage {
+    @usableFromInline
+    func copyFrom(_ other: Witness.Values._Storage) {
+        for key in unsafe other.dict.keys {
+            if let ptr = unsafe other.dict[key] {
+                // Release old value if present
+                if let oldPtr = unsafe dict[key] {
                     unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
                 }
                 _ = unsafe Unmanaged<AnyObject>.fromOpaque(ptr).retain()
-                unsafe result._storage.set(ptr, for: key)
+                unsafe set(ptr, for: key)
             }
         }
-        return result
     }
 }

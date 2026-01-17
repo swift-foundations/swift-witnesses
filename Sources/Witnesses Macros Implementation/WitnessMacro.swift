@@ -26,7 +26,8 @@ struct DeriveOptions: OptionSet {
     let rawValue: UInt8
 
     static let mock = DeriveOptions(rawValue: 1 << 0)
-    // Future: static let spy = DeriveOptions(rawValue: 1 << 1)
+    static let generator = DeriveOptions(rawValue: 1 << 1)
+    // Future: static let spy = DeriveOptions(rawValue: 1 << 2)
 }
 
 /// Parses derive options from the @Witness attribute arguments.
@@ -67,6 +68,7 @@ private func parseDeriveOptions(from node: AttributeSyntax) -> DeriveOptions {
 private func deriveOption(from name: String) -> DeriveOptions? {
     switch name {
     case "mock": return .mock
+    case "generator": return .generator
     // Future: case "spy": return .spy
     default: return nil
     }
@@ -136,6 +138,13 @@ extension WitnessMacro: MemberMacro {
         // Generate Observe accessor struct and property
         members.append(generateObserveStruct(for: closureProperties, structName: structDecl.name.text))
         members.append(generateObserveProperty())
+
+        // Generate callAsFunction if .generator is specified and there's exactly one closure
+        let deriveOptions = parseDeriveOptions(from: node)
+        if deriveOptions.contains(.generator), closureProperties.count == 1 {
+            let property = closureProperties[0]
+            members.append(generateCallAsFunction(for: property))
+        }
 
         return members
     }
@@ -245,6 +254,16 @@ extension WitnessMacro: ExtensionMacro {
                     )
                     extensions.append(mockExt)
                 }
+
+                // Generate constant() if .generator is specified and there's exactly one closure
+                if deriveOptions.contains(.generator), closureProperties.count == 1 {
+                    let constantExt = try generateConstantExtension(
+                        for: structDecl,
+                        type: type,
+                        property: closureProperties[0]
+                    )
+                    extensions.append(constantExt)
+                }
             }
         }
 
@@ -328,6 +347,56 @@ extension WitnessMacro: ExtensionMacro {
                     Self(
                         \(raw: closureInits)
                     )
+                }
+            }
+            """
+        )
+    }
+
+    // MARK: - Generator Extension
+
+    private static func generateConstantExtension(
+        for structDecl: StructDeclSyntax,
+        type: some TypeSyntaxProtocol,
+        property: ClosureProperty
+    ) throws -> ExtensionDeclSyntax {
+        let isPublic = structDecl.modifiers.contains { $0.name.tokenKind == .keyword(.public) }
+        let accessModifier = isPublic ? "public " : ""
+
+        let returnType = property.returnType.trimmedDescription
+
+        // Include typed throws annotation if present (for proper type inference)
+        let throwsAnnotation: String
+        if let throwsType = property.throwsType {
+            throwsAnnotation = "throws(\(throwsType.trimmedDescription)) "
+        } else if property.isThrowing {
+            throwsAnnotation = "throws "
+        } else {
+            throwsAnnotation = ""
+        }
+
+        // Generate closure with appropriate parameter handling
+        let closureBody: String
+        if property.parameters.isEmpty {
+            closureBody = "{ () \(throwsAnnotation)-> \(returnType) in value }"
+        } else {
+            let underscoreParams = property.parameters.map { _ in "_" }.joined(separator: ", ")
+            closureBody = "{ (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in value }"
+        }
+
+        return try ExtensionDeclSyntax(
+            """
+            extension \(type.trimmed) {
+                /// Creates a generator that always returns the given value.
+                ///
+                /// ```swift
+                /// let generator = \(raw: structDecl.name.text).constant(fixedValue)
+                /// print(generator())  // fixedValue
+                /// print(generator())  // fixedValue
+                /// ```
+                @inlinable
+                \(raw: accessModifier)static func constant(_ value: \(raw: returnType)) -> Self {
+                    Self(\(raw: property.name): \(raw: closureBody))
                 }
             }
             """
@@ -542,6 +611,42 @@ private func generateMethod(for property: ClosureProperty) -> DeclSyntax? {
     return """
         @inlinable
         public func \(raw: property.name)(\(raw: parameters))\(raw: effectSpecifiers)\(raw: returnClause) {
+            \(raw: tryKeyword)\(raw: awaitKeyword)self.\(raw: property.name)(\(raw: callArguments))
+        }
+        """
+}
+
+/// Generates callAsFunction() for .generator derive mode.
+private func generateCallAsFunction(for property: ClosureProperty) -> DeclSyntax {
+    let effectSpecifiers: String = {
+        var specs: [String] = []
+        if property.isAsync { specs.append("async") }
+        if property.isThrowing { specs.append("throws") }
+        return specs.isEmpty ? "" : " " + specs.joined(separator: " ")
+    }()
+
+    let returnClause = property.returnType.trimmedDescription == "Void"
+        ? ""
+        : " -> \(property.returnType)"
+
+    let awaitKeyword = property.isAsync ? "await " : ""
+    let tryKeyword = property.isThrowing ? "try " : ""
+
+    // Generate parameter list if the closure has parameters
+    let parameters = property.parameters.enumerated().map { index, param in
+        let label = param.label ?? "_"
+        let internalName = "p\(index)"
+        return "\(label) \(internalName): \(param.type)"
+    }.joined(separator: ", ")
+
+    let callArguments = property.parameters.enumerated().map { index, param in
+        let prefix = param.isInout ? "&" : ""
+        return "\(prefix)p\(index)"
+    }.joined(separator: ", ")
+
+    return """
+        @inlinable
+        public func callAsFunction(\(raw: parameters))\(raw: effectSpecifiers)\(raw: returnClause) {
             \(raw: tryKeyword)\(raw: awaitKeyword)self.\(raw: property.name)(\(raw: callArguments))
         }
         """

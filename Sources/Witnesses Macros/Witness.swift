@@ -60,6 +60,25 @@ extension Witness {
         /// let api = API.mock(fetchUser: testUser)  // deleteUser defaults to ()
         /// ```
         public static let mock = Derive(rawValue: 1 << 0)
+
+        /// Generate `callAsFunction()` forwarding and `constant(_:)` static method.
+        ///
+        /// Use this for single-closure "generator" witnesses like Date or UUID:
+        ///
+        /// ```swift
+        /// @Witness(.generator)
+        /// struct DateGenerator: Sendable {
+        ///     var now: @Sendable () -> Date
+        /// }
+        ///
+        /// // Generates:
+        /// // func callAsFunction() -> Date { now() }
+        /// // static func constant(_ value: Date) -> Self { .init(now: { value }) }
+        ///
+        /// let generator = DateGenerator.constant(Date(timeIntervalSince1970: 0))
+        /// print(generator())  // 1970-01-01
+        /// ```
+        public static let generator = Derive(rawValue: 1 << 1)
     }
 }
 
@@ -189,4 +208,107 @@ public macro Witness() = #externalMacro(
 public macro Witness(_ derive: Witness.Derive) = #externalMacro(
     module: "Witnesses_Macros_Implementation",
     type: "WitnessMacro"
+)
+
+// MARK: - WitnessScope
+
+/// Captures witness context at object creation time.
+///
+/// Apply `@WitnessScope` to a type to ensure that witness context is captured
+/// when the object is created and automatically restored when methods are called.
+/// This solves the problem where objects created inside a `Witness.Context.with` block
+/// lose their context when methods are called from outside the block.
+///
+/// ## Problem
+///
+/// ```swift
+/// let model: FeatureModel
+/// Witness.Context.with { $0[APIClient.self] = .mock } operation: {
+///     model = FeatureModel()  // Created with mock context
+/// }
+/// // Outside the block - context is lost!
+/// try await model.process()  // Uses live APIClient, not mock
+/// ```
+///
+/// ## Solution
+///
+/// ```swift
+/// @WitnessScope
+/// struct FeatureModel {
+///     func process() async throws {
+///         // Always uses context from when FeatureModel() was created
+///         let api = Witness.Context.current[APIClient.self]
+///     }
+/// }
+/// ```
+///
+/// ## Generated Code
+///
+/// The macro generates:
+/// - A `_capturedContext` property that captures context at init time
+/// - Method wrappers that restore the captured context before execution
+///
+/// ## Notes
+///
+/// - All methods in the type will have their context automatically restored
+/// - The captured context is immutable after initialization
+/// - Works with both sync and async methods
+@attached(member, names: named(_capturedContext))
+@attached(memberAttribute)
+public macro WitnessScope() = #externalMacro(
+    module: "Witnesses_Macros_Implementation",
+    type: "WitnessScopeMacro"
+)
+
+// MARK: - WitnessAccessors
+
+/// Generates static service accessor methods for a witness type.
+///
+/// Apply `@WitnessAccessors` alongside `@Witness` to generate static methods
+/// that access the witness from the current context and forward calls to it.
+/// This enables a more ergonomic API where you can call methods directly on
+/// the type without first obtaining an instance.
+///
+/// ## Without Accessors
+///
+/// ```swift
+/// let api = Witness.Context.current[APIClient.self]
+/// let user = try await api.fetch(id: 1)
+/// ```
+///
+/// ## With Accessors
+///
+/// ```swift
+/// @Witness
+/// @WitnessAccessors
+/// struct APIClient: Sendable {
+///     var fetch: (_ id: Int) async throws -> Data
+/// }
+///
+/// // Now you can call directly:
+/// let user = try await APIClient.fetch(id: 1)
+/// ```
+///
+/// ## Generated Code
+///
+/// For each closure property, generates a static method that:
+/// 1. Gets the witness from `Witness.Context.current`
+/// 2. Forwards the call to the instance method
+///
+/// ```swift
+/// extension APIClient {
+///     public static func fetch(id: Int) async throws -> Data {
+///         try await Witness.Context.current[Self.self].fetch(id: id)
+///     }
+/// }
+/// ```
+///
+/// ## Requirements
+///
+/// - The type must conform to `Witness.Key`
+/// - Must be used alongside `@Witness`
+@attached(peer, names: arbitrary)
+public macro WitnessAccessors() = #externalMacro(
+    module: "Witnesses_Macros_Implementation",
+    type: "WitnessAccessorsMacro"
 )

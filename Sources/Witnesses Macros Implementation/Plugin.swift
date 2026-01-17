@@ -17,5 +17,7 @@ import SwiftSyntaxMacros
 struct WitnessesMacrosPlugin: CompilerPlugin {
     let providingMacros: [any Macro.Type] = [
         WitnessMacro.self,
+        WitnessScopeMacro.self,
+        WitnessAccessorsMacro.self,
     ]
 }

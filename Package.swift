@@ -27,6 +27,7 @@ let package = Package(
         .package(path: "../../swift-primitives/swift-witness-primitives"),
         .package(path: "../../swift-primitives/swift-optic-primitives"),
         .package(path: "../../swift-primitives/swift-finite-primitives"),
+        .package(path: "../../swift-primitives/swift-reference-primitives"),
         .package(path: "../swift-testing-extras"),
     ],
     targets: [
@@ -35,6 +36,7 @@ let package = Package(
             dependencies: [
                 "Witnesses Macros",
                 .product(name: "Witness Primitives", package: "swift-witness-primitives"),
+                .product(name: "Reference Primitives", package: "swift-reference-primitives"),
             ]
         ),
         .target(

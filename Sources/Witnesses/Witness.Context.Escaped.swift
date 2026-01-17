@@ -47,8 +47,12 @@ extension Witness.Context {
         internal let values: Witness.Values
 
         @usableFromInline
+        internal let mode: Mode
+
+        @usableFromInline
         internal init() {
             self.values = Witness.Context.current
+            self.mode = Witness.Context.currentMode
         }
 
         /// Execute a synchronous operation with the captured witness context.
@@ -60,7 +64,9 @@ extension Witness.Context {
         public func yield<R, E: Error>(
             _ operation: () throws(E) -> R
         ) throws(E) -> R {
-            try Witness.Context.with({ $0 = self.values }, operation: operation)
+            let capturedValues = self.values
+            let capturedMode = self.mode
+            return try Witness.Context.with(mode: capturedMode, { $0 = capturedValues }, operation: operation)
         }
 
         /// Execute an asynchronous operation with the captured witness context.
@@ -72,7 +78,9 @@ extension Witness.Context {
         public func yield<R, E: Error>(
             _ operation: () async throws(E) -> R
         ) async throws(E) -> R {
-            try await Witness.Context.with({ $0 = self.values }, operation: operation)
+            let capturedValues = self.values
+            let capturedMode = self.mode
+            return try await Witness.Context.with(mode: capturedMode, { $0 = capturedValues }, operation: operation)
         }
     }
 

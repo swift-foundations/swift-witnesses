@@ -11,11 +11,11 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
-import Testing_Extras
+import Testing
 @testable import Witnesses
 
 extension Witness.Unimplemented.Error {
-    #TestSuites
+    #Tests
 }
 
 // MARK: - Unit Tests

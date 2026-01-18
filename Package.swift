@@ -29,7 +29,6 @@ let package = Package(
         .package(path: "../../swift-primitives/swift-finite-primitives"),
         .package(path: "../../swift-primitives/swift-reference-primitives"),
         .package(path: "../../swift-primitives/swift-cache-primitives"),
-        .package(path: "../swift-testing-extras"),
     ],
     targets: [
         .target(
@@ -58,14 +57,6 @@ let package = Package(
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
                 .product(name: "SwiftDiagnostics", package: "swift-syntax"),
             ]
-        ),
-        .testTarget(
-            name: "Witnesses Tests",
-            dependencies: [
-                "Witnesses",
-                .product(name: "Testing Extras", package: "swift-testing-extras"),
-            ],
-            path: "Tests/Witnesses Tests"
         ),
     ],
     swiftLanguageModes: [.v6]

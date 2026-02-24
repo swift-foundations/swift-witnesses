@@ -39,7 +39,7 @@ extension Witness {
     /// - Values set in the context when the property wrapper was created are preserved
     /// - Values set in nested `Witness.Context.with` blocks override captured values
     @propertyWrapper
-    public struct Access<Key: Witness.Key>: Sendable where Key.Value == Key {
+    public struct Access<Key: Witness.Key>: Sendable where Key.Value == Key, Key.Value: Copyable {
         @usableFromInline
         internal let initialValues: Witness.Values
 

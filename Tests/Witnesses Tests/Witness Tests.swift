@@ -50,6 +50,28 @@ extension Witness.Test.Unit {
         _ = try await live.fetch(id: 1)
         _ = try await test.fetch(id: 1)
     }
+
+    @Test
+    func `Copyable key defaults still chain through liveValue`() async throws {
+        let live = TestAPI.liveValue
+        let preview = TestAPI.previewValue
+        let test = TestAPI.testValue
+
+        let liveResult = try await live.fetch(id: 1)
+        let previewResult = try await preview.fetch(id: 1)
+        let testResult = try await test.fetch(id: 1)
+
+        #expect(liveResult == "Live result for 1")
+        #expect(previewResult == "Live result for 1")  // previewValue defaults to liveValue
+        #expect(testResult == "Test result for 1")      // TestAPI overrides testValue
+    }
+
+    @Test
+    func `Noncopyable key provides distinct values per mode`() {
+        Witness.Context.withValue(HandleProvider.self) { value in
+            #expect(value.id == 1)  // liveValue (default mode)
+        }
+    }
 }
 
 // MARK: - Edge Case Tests

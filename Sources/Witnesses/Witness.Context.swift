@@ -100,7 +100,7 @@ extension Witness.Context {
     ///
     /// - Parameter key: The key type to look up.
     /// - Returns: The resolved value for the key.
-    public static subscript<K: Witness.Key>(key: K.Type) -> K.Value {
+    public static subscript<K: Witness.Key>(key: K.Type) -> K.Value where K.Value: Copyable {
         _current.values.value(for: key, mode: _current.mode)
     }
 
@@ -112,8 +112,23 @@ extension Witness.Context {
     ///
     /// - Parameter key: The key type to resolve.
     /// - Returns: A result containing the resolved value or a resolution error.
-    public static func value<K: Witness.Key>(_ key: K.Type) -> Result<K.Value, Witness.Resolution.Error> {
+    public static func value<K: Witness.Key>(_ key: K.Type) -> Result<K.Value, Witness.Resolution.Error> where K.Value: Copyable {
         .success(_current.values.value(for: key, mode: _current.mode))
+    }
+
+    /// Accesses the current value for a key via closure-scoped borrow.
+    ///
+    /// Works for all value types including `~Copyable`.
+    ///
+    /// - Parameters:
+    ///   - key: The key type to look up.
+    ///   - body: A closure that receives a borrow of the resolved value.
+    /// - Returns: The result of `body`.
+    public static func withValue<K: Witness.Key, R>(
+        _ key: K.Type,
+        _ body: (borrowing K.Value) -> R
+    ) -> R {
+        _current.values.withValue(for: key, mode: _current.mode, body)
     }
 }
 
@@ -230,10 +245,10 @@ extension Witness.Context {
     }
 }
 
-// MARK: - Mode-Specific Contexts
+// MARK: - Mode-Specific Contexts (Synchronous)
 
 extension Witness.Context {
-    /// Executes a closure in test mode.
+    /// Executes a synchronous closure in test mode.
     ///
     /// In test mode, unset keys return their `testValue`.
     ///
@@ -241,18 +256,24 @@ extension Witness.Context {
     ///   - modify: An optional closure to further modify values.
     ///   - operation: The test operation to execute.
     /// - Returns: The result of the operation.
-    /// - Throws: Rethrows any error from the operation.
-    public static func withTest<T>(
+    /// - Throws: The typed error from the operation.
+    public static func withTest<T, E: Error>(
         _ modify: ((inout Witness.Values) -> Void)? = nil,
-        operation: () async throws -> T
-    ) async rethrows -> T {
+        operation: () throws(E) -> T
+    ) throws(E) -> T {
         var context = _current
         context.mode = .test
         modify?(&context.values)
-        return try await $_current.withValue(context, operation: operation)
+        return try $_current.withValue(context) {
+            do throws(E) {
+                return Result<T, E>.success(try operation())
+            } catch {
+                return Result<T, E>.failure(error)
+            }
+        }.get()
     }
 
-    /// Executes a closure in preview mode.
+    /// Executes a synchronous closure in preview mode.
     ///
     /// In preview mode, unset keys return their `previewValue`.
     ///
@@ -260,14 +281,74 @@ extension Witness.Context {
     ///   - modify: An optional closure to further modify values.
     ///   - operation: The preview operation to execute.
     /// - Returns: The result of the operation.
-    /// - Throws: Rethrows any error from the operation.
-    public static func withPreview<T>(
+    /// - Throws: The typed error from the operation.
+    public static func withPreview<T, E: Error>(
         _ modify: ((inout Witness.Values) -> Void)? = nil,
-        operation: () async throws -> T
-    ) async rethrows -> T {
+        operation: () throws(E) -> T
+    ) throws(E) -> T {
         var context = _current
         context.mode = .preview
         modify?(&context.values)
-        return try await $_current.withValue(context, operation: operation)
+        return try $_current.withValue(context) {
+            do throws(E) {
+                return Result<T, E>.success(try operation())
+            } catch {
+                return Result<T, E>.failure(error)
+            }
+        }.get()
+    }
+}
+
+// MARK: - Mode-Specific Contexts (Asynchronous)
+
+extension Witness.Context {
+    /// Executes an async closure in test mode.
+    ///
+    /// In test mode, unset keys return their `testValue`.
+    ///
+    /// - Parameters:
+    ///   - modify: An optional closure to further modify values.
+    ///   - operation: The test operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    public static func withTest<T, E: Error>(
+        _ modify: ((inout Witness.Values) -> Void)? = nil,
+        operation: () async throws(E) -> T
+    ) async throws(E) -> T {
+        var context = _current
+        context.mode = .test
+        modify?(&context.values)
+        return try await $_current.withValue(context) {
+            do throws(E) {
+                return Result<T, E>.success(try await operation())
+            } catch {
+                return Result<T, E>.failure(error)
+            }
+        }.get()
+    }
+
+    /// Executes an async closure in preview mode.
+    ///
+    /// In preview mode, unset keys return their `previewValue`.
+    ///
+    /// - Parameters:
+    ///   - modify: An optional closure to further modify values.
+    ///   - operation: The preview operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    public static func withPreview<T, E: Error>(
+        _ modify: ((inout Witness.Values) -> Void)? = nil,
+        operation: () async throws(E) -> T
+    ) async throws(E) -> T {
+        var context = _current
+        context.mode = .preview
+        modify?(&context.values)
+        return try await $_current.withValue(context) {
+            do throws(E) {
+                return Result<T, E>.success(try await operation())
+            } catch {
+                return Result<T, E>.failure(error)
+            }
+        }.get()
     }
 }

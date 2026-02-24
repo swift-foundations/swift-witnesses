@@ -67,6 +67,53 @@ extension Witness.Context.Test.Unit {
         let result = try await api.fetch(id: 1)
         #expect(result == "Live result for 1")
     }
+
+    @Test
+    func `withValue resolves noncopyable from current context`() {
+        let id = Witness.Context.withValue(HandleProvider.self) { value in
+            value.id
+        }
+        #expect(id == 1)  // Default live mode
+    }
+
+    @Test
+    func `withValue respects test mode`() {
+        Witness.Context.withTest {
+            let id = Witness.Context.withValue(HandleProvider.self) { value in
+                value.id
+            }
+            #expect(id == 99)
+        }
+    }
+
+    @Test
+    func `withValue respects preview mode`() {
+        Witness.Context.withPreview {
+            let id = Witness.Context.withValue(HandleProvider.self) { value in
+                value.id
+            }
+            #expect(id == 50)
+        }
+    }
+
+    @Test
+    func `Copyable Context subscript still works`() async throws {
+        let api = Witness.Context[TestAPI.self]
+        let result = try await api.fetch(id: 1)
+        #expect(result == "Live result for 1")
+    }
+
+    @Test
+    func `Copyable Context value still works`() async throws {
+        let result = Witness.Context.value(TestAPI.self)
+        switch result {
+        case .success(let api):
+            let fetchResult = try await api.fetch(id: 1)
+            #expect(fetchResult == "Live result for 1")
+        case .failure:
+            Issue.record("Expected success")
+        }
+    }
 }
 
 // MARK: - Edge Case Tests
@@ -166,6 +213,85 @@ extension Witness.Context.Test.Integration {
             #expect(result2 == "Async context")
         }
     }
+
+    @Test
+    func `Context scope with noncopyable override via set`() {
+        Witness.Context.with { values in
+            values.set(HandleProvider.self, UniqueHandle(id: 42))
+        } operation: {
+            let id = Witness.Context.withValue(HandleProvider.self) { value in
+                value.id
+            }
+            #expect(id == 42)
+        }
+    }
+
+    @Test
+    func `Nested context scopes with noncopyable override`() {
+        Witness.Context.with { values in
+            values.set(HandleProvider.self, UniqueHandle(id: 10))
+        } operation: {
+            let outer = Witness.Context.withValue(HandleProvider.self) { $0.id }
+            #expect(outer == 10)
+
+            Witness.Context.with { values in
+                values.set(HandleProvider.self, UniqueHandle(id: 20))
+            } operation: {
+                let inner = Witness.Context.withValue(HandleProvider.self) { $0.id }
+                #expect(inner == 20)
+            }
+
+            // Restored after inner scope.
+            let restored = Witness.Context.withValue(HandleProvider.self) { $0.id }
+            #expect(restored == 10)
+        }
+    }
+
+    @Test
+    func `Test mode with noncopyable key resolves testValue`() {
+        Witness.Context.withTest {
+            let id = Witness.Context.withValue(HandleProvider.self) { $0.id }
+            #expect(id == 99)
+        }
+    }
+
+    @Test
+    func `Preview mode with noncopyable key resolves previewValue`() {
+        Witness.Context.withPreview {
+            let id = Witness.Context.withValue(HandleProvider.self) { $0.id }
+            #expect(id == 50)
+        }
+    }
+
+    @Test
+    func `Mode override combined with explicit set`() {
+        Witness.Context.with(mode: .test) { values in
+            values.set(HandleProvider.self, UniqueHandle(id: 42))
+        } operation: {
+            let id = Witness.Context.withValue(HandleProvider.self) { $0.id }
+            #expect(id == 42)
+        }
+    }
+
+    @Test
+    func `Copyable and noncopyable keys coexist in same context`() async throws {
+        try await Witness.Context.with { values in
+            values[TestAPI.self] = TestAPI(
+                fetch: { id in "Custom \(id)" },
+                update: { _, _ in }
+            )
+            values.set(HandleProvider.self, UniqueHandle(id: 42))
+        } operation: {
+            // Copyable via subscript
+            let api = Witness.Context[TestAPI.self]
+            let fetchResult = try await api.fetch(id: 1)
+            #expect(fetchResult == "Custom 1")
+
+            // Noncopyable via withValue
+            let handleId = Witness.Context.withValue(HandleProvider.self) { $0.id }
+            #expect(handleId == 42)
+        }
+    }
 }
 
 // MARK: - Performance Tests
@@ -192,6 +318,18 @@ extension Witness.Context.Test.Performance {
         // Measured
         for _ in 0..<1000 {
             _ = Witness.Context.current[TestAPI.self]
+        }
+    }
+
+    @Test
+    func `Context withValue noncopyable`() {
+        // Warmup
+        for _ in 0..<100 {
+            Witness.Context.withValue(HandleProvider.self) { _ in }
+        }
+        // Measured
+        for _ in 0..<1000 {
+            Witness.Context.withValue(HandleProvider.self) { _ in }
         }
     }
 }

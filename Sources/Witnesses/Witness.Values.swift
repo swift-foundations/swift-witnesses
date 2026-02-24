@@ -55,10 +55,8 @@ extension Witness {
 
             /// Releases all retained boxes on deallocation.
             deinit {
-                for key in dict.keys {
-                    if let ptr = dict[key] {
-                        unsafe Unmanaged<AnyObject>.fromOpaque(ptr).release()
-                    }
+                for ptr in dict.values {
+                    unsafe Unmanaged<AnyObject>.fromOpaque(ptr).release()
                 }
             }
         }
@@ -96,11 +94,9 @@ extension Witness.Values {
         if !isKnownUniquelyReferenced(&_storage) {
             let newStorage = _Storage()
             // Copy all entries (retaining each box)
-            for key in unsafe _storage.dict.keys {
-                if let ptr = unsafe _storage.dict[key] {
-                    _ = unsafe Unmanaged<AnyObject>.fromOpaque(ptr).retain()
-                    unsafe newStorage.set(ptr, for: key)
-                }
+            for (key, ptr) in unsafe _storage.dict {
+                _ = unsafe Unmanaged<AnyObject>.fromOpaque(ptr).retain()
+                unsafe newStorage.set(ptr, for: key)
             }
             _storage = newStorage
         }
@@ -115,7 +111,7 @@ extension Witness.Values {
     ///   - mode: The execution mode determining default value selection.
     /// - Returns: The stored witness, or the key's default value based on mode.
     @usableFromInline
-    internal func value<K: Witness.Key>(for key: K.Type, mode: Witness.Context.Mode) -> K.Value {
+    internal func value<K: Witness.Key>(for key: K.Type, mode: Witness.Context.Mode) -> K.Value where K.Value: Copyable {
         let id = ObjectIdentifier(K.self)
 
         // 1. Check explicit overrides
@@ -141,6 +137,46 @@ extension Witness.Values {
         }
     }
 
+    /// Accesses the witness for the given key type via closure-scoped borrow.
+    ///
+    /// Works for all value types including `~Copyable`. Handles all three lookup
+    /// stages (stored, prepared, default) and calls `body` directly per-branch.
+    ///
+    /// - Parameters:
+    ///   - key: The key type identifying the witness.
+    ///   - mode: The execution mode determining default value selection.
+    ///   - body: A closure that receives a borrow of the resolved value.
+    /// - Returns: The result of `body`.
+    @usableFromInline
+    internal func withValue<K: Witness.Key, R>(
+        for key: K.Type,
+        mode: Witness.Context.Mode,
+        _ body: (borrowing K.Value) -> R
+    ) -> R {
+        let id = ObjectIdentifier(K.self)
+
+        // 1. Check explicit overrides
+        if let ptr = unsafe _storage.dict[id] {
+            return body(
+                unsafe Unmanaged<Ownership.Shared<K.Value>>.fromOpaque(ptr)
+                    .takeUnretainedValue()
+                    .value
+            )
+        }
+
+        // 2. Check prepared values
+        if let result = _preparedRef?.withValue(K.self, body) {
+            return result
+        }
+
+        // 3. Return default based on mode
+        return switch mode {
+        case .live: body(K.liveValue)
+        case .preview: body(K.previewValue)
+        case .test: body(K.testValue)
+        }
+    }
+
     /// Accesses the witness for the given key type.
     ///
     /// For get operations, uses `.live` mode by default. For mode-aware access,
@@ -149,7 +185,7 @@ extension Witness.Values {
     /// - Parameter key: The key type identifying the witness.
     /// - Returns: The stored witness, or the key's `liveValue` if not set.
     @inlinable
-    public subscript<K: Witness.Key>(key: K.Type) -> K.Value {
+    public subscript<K: Witness.Key>(key: K.Type) -> K.Value where K.Value: Copyable {
         get {
             value(for: key, mode: .live)
         }
@@ -165,6 +201,27 @@ extension Witness.Values {
             let ptr = unsafe UnsafeRawPointer(Unmanaged.passRetained(box).toOpaque())
             unsafe _storage.set(ptr, for: id)
         }
+    }
+
+    /// Sets the witness for the given key type.
+    ///
+    /// Works for all value types including `~Copyable`. Takes ownership of the
+    /// value and stores it in the container.
+    ///
+    /// - Parameters:
+    ///   - key: The key type identifying the witness.
+    ///   - value: The value to store (consumed).
+    public mutating func set<K: Witness.Key>(_ key: K.Type, _ value: consuming K.Value) {
+        _ensureUnique()
+        let id = ObjectIdentifier(K.self)
+        // Release old value if present
+        if let oldPtr = unsafe _storage.dict[id] {
+            unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
+        }
+        // Store new value (retained)
+        let box = Ownership.Shared(value)
+        let ptr = unsafe UnsafeRawPointer(Unmanaged.passRetained(box).toOpaque())
+        unsafe _storage.set(ptr, for: id)
     }
 
     /// Creates a new values container by merging another into this one.
@@ -188,15 +245,12 @@ extension Witness.Values {
 extension Witness.Values._Storage {
     @usableFromInline
     func copyFrom(_ other: Witness.Values._Storage) {
-        for key in unsafe other.dict.keys {
-            if let ptr = unsafe other.dict[key] {
-                // Release old value if present
-                if let oldPtr = unsafe dict[key] {
-                    unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
-                }
-                _ = unsafe Unmanaged<AnyObject>.fromOpaque(ptr).retain()
-                unsafe set(ptr, for: key)
+        for (key, ptr) in unsafe other.dict {
+            if let oldPtr = unsafe dict[key] {
+                unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
             }
+            _ = unsafe Unmanaged<AnyObject>.fromOpaque(ptr).retain()
+            unsafe set(ptr, for: key)
         }
     }
 }

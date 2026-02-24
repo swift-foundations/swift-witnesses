@@ -28,6 +28,37 @@ struct MockableAPI: Sendable {
     var deleteUser: @Sendable (_ id: Int) async throws(Witness.Unimplemented.Error) -> Void
 }
 
+// MARK: - ~Copyable Witness Fixtures
+
+/// A ~Copyable witness value representing a unique, non-shareable resource.
+struct UniqueHandle: ~Copyable, Sendable {
+    let id: Int
+}
+
+/// Witness key providing ~Copyable values.
+///
+/// Because `Value` is `~Copyable`, the key must provide explicit implementations
+/// for `liveValue`, `testValue`, and `previewValue` — the protocol defaults
+/// are constrained to `where Value: Copyable`.
+struct HandleProvider: Witness.Key, Sendable {
+    typealias Value = UniqueHandle
+
+    static var liveValue: UniqueHandle { UniqueHandle(id: 1) }
+    static var testValue: UniqueHandle { UniqueHandle(id: 99) }
+    static var previewValue: UniqueHandle { UniqueHandle(id: 50) }
+}
+
+/// A second ~Copyable key to test multi-key independence.
+struct TokenProvider: Witness.Key, Sendable {
+    typealias Value = UniqueHandle
+
+    static var liveValue: UniqueHandle { UniqueHandle(id: 1000) }
+    static var testValue: UniqueHandle { UniqueHandle(id: 9999) }
+    static var previewValue: UniqueHandle { UniqueHandle(id: 5000) }
+}
+
+// MARK: - Copyable Witness Fixtures
+
 extension TestAPI: Witness.Key {
     static var liveValue: TestAPI {
         TestAPI(

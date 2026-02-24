@@ -22,7 +22,7 @@ import Witness_Primitives
 /// `testValue` is **required**. `previewValue` defaults to `testValue`.
 public protocol __WitnessKeyTest<Value>: Sendable {
     /// The witness type this key provides.
-    associatedtype Value: Sendable = Self
+    associatedtype Value: ~Copyable & Sendable = Self
 
     /// The default value for test contexts.
     static var testValue: Value { get }
@@ -33,7 +33,7 @@ public protocol __WitnessKeyTest<Value>: Sendable {
     static var previewValue: Value { get }
 }
 
-extension __WitnessKeyTest {
+extension __WitnessKeyTest where Value: Copyable {
     /// Default preview value falls back to test value.
     @inlinable
     public static var previewValue: Value { testValue }
@@ -73,7 +73,7 @@ extension Witness {
     }
 }
 
-extension Witness.Key {
+extension Witness.Key where Value: Copyable {
     /// Default preview value falls back to live value.
     @inlinable
     public static var previewValue: Value { liveValue }

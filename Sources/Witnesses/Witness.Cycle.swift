@@ -58,10 +58,10 @@ extension Witness {
         public func callAsFunction() -> T {
             let i = _index.withLock { index -> Int in
                 let current = index
-                index += 1
+                index = (current + 1) % values.count
                 return current
             }
-            return values[i % values.count]
+            return values[i]
         }
     }
 }

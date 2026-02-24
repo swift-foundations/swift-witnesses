@@ -40,7 +40,7 @@ extension Witness {
     ///
     /// `CapturedContext` is `Sendable` and can be safely shared across actor boundaries.
     /// The captured values are immutable after initialization.
-    public final class CapturedContext: @unchecked Sendable {
+    public final class CapturedContext: Sendable {
         /// The captured witness values.
         public let values: Witness.Values
 

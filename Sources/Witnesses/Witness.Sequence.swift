@@ -59,10 +59,10 @@ extension Witness {
         public func callAsFunction() -> T {
             let i = _index.withLock { index -> Int in
                 let current = index
-                index += 1
+                if current < values.count - 1 { index = current + 1 }
                 return current
             }
-            return values[min(i, values.count - 1)]
+            return values[i]
         }
     }
 }

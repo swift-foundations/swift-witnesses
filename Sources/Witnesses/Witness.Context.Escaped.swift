@@ -64,9 +64,7 @@ extension Witness.Context {
         public func yield<R, E: Error>(
             _ operation: () throws(E) -> R
         ) throws(E) -> R {
-            let capturedValues = self.values
-            let capturedMode = self.mode
-            return try Witness.Context.with(mode: capturedMode, { $0 = capturedValues }, operation: operation)
+            try Witness.Context.with(mode: mode, { $0 = values }, operation: operation)
         }
 
         /// Execute an asynchronous operation with the captured witness context.
@@ -78,9 +76,7 @@ extension Witness.Context {
         public func yield<R, E: Error>(
             _ operation: () async throws(E) -> R
         ) async throws(E) -> R {
-            let capturedValues = self.values
-            let capturedMode = self.mode
-            return try await Witness.Context.with(mode: capturedMode, { $0 = capturedValues }, operation: operation)
+            try await Witness.Context.with(mode: mode, { $0 = values }, operation: operation)
         }
     }
 

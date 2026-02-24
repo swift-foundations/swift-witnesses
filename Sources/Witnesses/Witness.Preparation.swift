@@ -63,17 +63,25 @@ extension Witness.Preparation {
     /// Values set in the store are used as fallbacks when resolving witnesses.
     ///
     /// - Parameters:
+    ///   - isolation: The actor isolation context for the operation.
     ///   - configure: A closure that configures the preparation store.
     ///   - operation: The operation to execute with prepared values.
     /// - Returns: The result of the operation.
-    /// - Throws: Rethrows any error from the operation.
-    public static func with<T>(
+    /// - Throws: The typed error from the operation.
+    public static func with<T, E: Error>(
+        isolation: isolated (any Actor)? = #isolation,
         _ configure: (Store) -> Void,
-        operation: () async throws -> T
-    ) async rethrows -> T {
+        operation: () async throws(E) -> T
+    ) async throws(E) -> T {
         let newStore = Store()
         configure(newStore)
-        return try await $store.withValue(newStore, operation: operation)
+        return try await $store.withValue(newStore) {
+            do throws(E) {
+                return Result<T, E>.success(try await operation())
+            } catch {
+                return Result<T, E>.failure(error)
+            }
+        }.get()
     }
 
     /// Executes an operation with prepared witness values (synchronous).
@@ -82,13 +90,19 @@ extension Witness.Preparation {
     ///   - configure: A closure that configures the preparation store.
     ///   - operation: The operation to execute with prepared values.
     /// - Returns: The result of the operation.
-    /// - Throws: Rethrows any error from the operation.
-    public static func with<T>(
+    /// - Throws: The typed error from the operation.
+    public static func with<T, E: Error>(
         _ configure: (Store) -> Void,
-        operation: () throws -> T
-    ) rethrows -> T {
+        operation: () throws(E) -> T
+    ) throws(E) -> T {
         let newStore = Store()
         configure(newStore)
-        return try $store.withValue(newStore, operation: operation)
+        return try $store.withValue(newStore) {
+            do throws(E) {
+                return Result<T, E>.success(try operation())
+            } catch {
+                return Result<T, E>.failure(error)
+            }
+        }.get()
     }
 }

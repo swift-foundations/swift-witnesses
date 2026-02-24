@@ -692,7 +692,7 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
 
     // Generate Case.ordinal switch
     let caseOrdinalCases = properties.enumerated().map { index, property in
-        "case .\(property.name): \(index)"
+        "case .\(property.name): Ordinal_Primitives.Ordinal(\(index))"
     }.joined(separator: "\n                    ")
 
     // Generate Case.init(__unchecked:ordinal:) switch - last case is default
@@ -735,18 +735,18 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
                 \(raw: caseCases)
 
                 @inlinable
-                public static var count: Int { \(raw: caseCount) }
+                public static var count: Cardinal_Primitives.Cardinal { Cardinal_Primitives.Cardinal(\(raw: caseCount)) }
 
                 @inlinable
-                public var ordinal: Int {
+                public var ordinal: Ordinal_Primitives.Ordinal {
                     switch self {
                     \(raw: caseOrdinalCases)
                     }
                 }
 
                 @inlinable
-                public init(__unchecked: Void, ordinal: Int) {
-                    switch ordinal {
+                public init(__unchecked: Void, ordinal: Ordinal_Primitives.Ordinal) {
+                    switch ordinal.rawValue {
                     \(raw: caseInitCases)
                     }
                 }

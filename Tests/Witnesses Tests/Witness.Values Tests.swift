@@ -11,18 +11,23 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
-import Testing
 @testable import Witnesses
 
 extension Witness.Values {
-    #Tests
+    @Suite
+    struct Test {
+        @Suite struct Unit {}
+        @Suite struct EdgeCase {}
+        @Suite struct Integration {}
+        @Suite(.serialized) struct Performance {}
+    }
 }
 
 // MARK: - Unit Tests
 
 extension Witness.Values.Test.Unit {
-    @Test("Values container stores and retrieves witnesses")
-    func valuesStorage() async throws {
+    @Test
+    func `Values container stores and retrieves witnesses`() async throws {
         var values = Witness.Values()
 
         // Before setting, returns liveValue
@@ -41,8 +46,8 @@ extension Witness.Values.Test.Unit {
         #expect(customResult == "Custom result for 1")
     }
 
-    @Test("Test mode returns testValue by default")
-    func testMode() async throws {
+    @Test
+    func `Test mode returns testValue by default`() async throws {
         // Use Witness.Context with test mode to get testValue
         await Witness.Context.withTest {
             let api = Witness.Context[TestAPI.self]
@@ -53,16 +58,16 @@ extension Witness.Values.Test.Unit {
         }
     }
 
-    @Test("Live mode returns liveValue by default")
-    func liveMode() async throws {
+    @Test
+    func `Live mode returns liveValue by default`() async throws {
         // Default mode is live
         let api = Witness.Context[TestAPI.self]
         let result = try await api.fetch(id: 1)
         #expect(result == "Live result for 1")
     }
 
-    @Test("Default init creates live context")
-    func defaultInit() async throws {
+    @Test
+    func `Default init creates live context`() async throws {
         let values = Witness.Values()
 
         let api = values[TestAPI.self]
@@ -74,8 +79,8 @@ extension Witness.Values.Test.Unit {
 // MARK: - Edge Case Tests
 
 extension Witness.Values.Test.EdgeCase {
-    @Test("Overwriting a value replaces it")
-    func overwriteValue() async throws {
+    @Test
+    func `Overwriting a value replaces it`() async throws {
         var values = Witness.Values()
 
         values[TestAPI.self] = TestAPI(
@@ -93,8 +98,8 @@ extension Witness.Values.Test.EdgeCase {
         #expect(result == "Second")
     }
 
-    @Test("Multiple different keys are independent")
-    func multipleKeys() async throws {
+    @Test
+    func `Multiple different keys are independent`() async throws {
         var values = Witness.Values()
 
         values[TestAPI.self] = TestAPI(
@@ -112,22 +117,32 @@ extension Witness.Values.Test.EdgeCase {
 // MARK: - Performance Tests
 
 extension Witness.Values.Test.Performance {
-    @Test("Subscript access", .timed(iterations: 1000, warmup: 100))
-    func subscriptAccess() async throws {
+    @Test
+    func `Subscript access`() async throws {
         let values = Witness.Values()
+        // Warmup
         for _ in 0..<100 {
+            _ = values[TestAPI.self]
+        }
+        // Measured
+        for _ in 0..<1000 {
             _ = values[TestAPI.self]
         }
     }
 
-    @Test("Subscript write", .timed(iterations: 1000, warmup: 100))
-    func subscriptWrite() {
+    @Test
+    func `Subscript write`() {
         var values = Witness.Values()
         let api = TestAPI(
             fetch: { _ in "Test" },
             update: { _, _ in }
         )
+        // Warmup
         for _ in 0..<100 {
+            values[TestAPI.self] = api
+        }
+        // Measured
+        for _ in 0..<1000 {
             values[TestAPI.self] = api
         }
     }

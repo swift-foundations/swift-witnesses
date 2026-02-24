@@ -11,18 +11,23 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
-import Testing
 @testable import Witnesses
 
 extension Witness.Context {
-    #Tests
+    @Suite
+    struct Test {
+        @Suite struct Unit {}
+        @Suite struct EdgeCase {}
+        @Suite struct Integration {}
+        @Suite(.serialized) struct Performance {}
+    }
 }
 
 // MARK: - Unit Tests
 
 extension Witness.Context.Test.Unit {
-    @Test("Context scoped override")
-    func scopedOverride() async throws {
+    @Test
+    func `Context scoped override`() async throws {
         // Outside scope, uses default
         let defaultAPI = Witness.Context.current[TestAPI.self]
         let defaultResult = try await defaultAPI.fetch(id: 1)
@@ -46,8 +51,8 @@ extension Witness.Context.Test.Unit {
         #expect(afterResult == "Live result for 1")
     }
 
-    @Test("Test context provides testValue")
-    func testContextScope() async throws {
+    @Test
+    func `Test context provides testValue`() async throws {
         await Witness.Context.withTest {
             // Use Witness.Context[key] to get mode-aware access
             let api = Witness.Context[TestAPI.self]
@@ -56,8 +61,8 @@ extension Witness.Context.Test.Unit {
         }
     }
 
-    @Test("Current returns default values outside scope")
-    func currentOutsideScope() async throws {
+    @Test
+    func `Current returns default values outside scope`() async throws {
         let api = Witness.Context.current[TestAPI.self]
         let result = try await api.fetch(id: 1)
         #expect(result == "Live result for 1")
@@ -67,8 +72,8 @@ extension Witness.Context.Test.Unit {
 // MARK: - Edge Case Tests
 
 extension Witness.Context.Test.EdgeCase {
-    @Test("Nested scopes override correctly")
-    func nestedScopes() async throws {
+    @Test
+    func `Nested scopes override correctly`() async throws {
         try await Witness.Context.with { values in
             values[TestAPI.self] = TestAPI(
                 fetch: { _ in "Outer" },
@@ -97,8 +102,8 @@ extension Witness.Context.Test.EdgeCase {
         }
     }
 
-    @Test("Empty modification preserves values")
-    func emptyModification() async throws {
+    @Test
+    func `Empty modification preserves values`() async throws {
         try await Witness.Context.with { _ in
             // No modifications
         } operation: {
@@ -108,8 +113,8 @@ extension Witness.Context.Test.EdgeCase {
         }
     }
 
-    @Test("Test context with additional overrides")
-    func testContextWithOverrides() async throws {
+    @Test
+    func `Test context with additional overrides`() async throws {
         try await Witness.Context.withTest { values in
             values[TestAPI.self] = TestAPI(
                 fetch: { _ in "Custom in test" },
@@ -126,8 +131,8 @@ extension Witness.Context.Test.EdgeCase {
 // MARK: - Integration Tests
 
 extension Witness.Context.Test.Integration {
-    @Test("Synchronous with operation works")
-    func synchronousOperation() throws {
+    @Test
+    func `Synchronous with operation works`() throws {
         let result = try Witness.Context.with { values in
             values[TestAPI.self] = TestAPI(
                 fetch: { _ in "Sync" },
@@ -139,8 +144,8 @@ extension Witness.Context.Test.Integration {
         #expect(result == "completed")
     }
 
-    @Test("Async operation preserves context across await")
-    func asyncContextPreservation() async throws {
+    @Test
+    func `Async operation preserves context across await`() async throws {
         try await Witness.Context.with { values in
             values[TestAPI.self] = TestAPI(
                 fetch: { _ in "Async context" },
@@ -166,16 +171,26 @@ extension Witness.Context.Test.Integration {
 // MARK: - Performance Tests
 
 extension Witness.Context.Test.Performance {
-    @Test("Scoped override overhead", .timed(iterations: 100, warmup: 10))
-    func scopedOverrideOverhead() {
-        _ = Witness.Context.with { _ in } operation: {
-            42
+    @Test
+    func `Scoped override overhead`() {
+        // Warmup
+        for _ in 0..<10 {
+            _ = Witness.Context.with { _ in } operation: { 42 }
+        }
+        // Measured
+        for _ in 0..<100 {
+            _ = Witness.Context.with { _ in } operation: { 42 }
         }
     }
 
-    @Test("Current access", .timed(iterations: 1000, warmup: 100))
-    func currentAccess() {
+    @Test
+    func `Current access`() {
+        // Warmup
         for _ in 0..<100 {
+            _ = Witness.Context.current[TestAPI.self]
+        }
+        // Measured
+        for _ in 0..<1000 {
             _ = Witness.Context.current[TestAPI.self]
         }
     }

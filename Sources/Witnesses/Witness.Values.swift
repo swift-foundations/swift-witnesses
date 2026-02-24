@@ -11,7 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Witness_Primitives
-public import Reference_Primitives
+public import Ownership_Primitives
 
 extension Witness {
     /// A container for witness values keyed by their ``Witness/Key`` type.
@@ -120,7 +120,7 @@ extension Witness.Values {
 
         // 1. Check explicit overrides
         if let ptr = unsafe _storage.dict[id] {
-            return unsafe Unmanaged<Reference.Box<K.Value>>.fromOpaque(ptr)
+            return unsafe Unmanaged<Ownership.Shared<K.Value>>.fromOpaque(ptr)
                 .takeUnretainedValue()
                 .value
         }
@@ -161,7 +161,7 @@ extension Witness.Values {
                 unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
             }
             // Store new value (retained)
-            let box = Reference.Box(newValue)
+            let box = Ownership.Shared(newValue)
             let ptr = unsafe UnsafeRawPointer(Unmanaged.passRetained(box).toOpaque())
             unsafe _storage.set(ptr, for: id)
         }

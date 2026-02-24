@@ -81,7 +81,7 @@ func generateEnumPrismMembers(for cases: [EnumCase], enumName: String) -> [DeclS
     let escapedCaseNames = cases.map { escapeIdentifier($0.name) }
     let caseCases = escapedCaseNames.map { "case \($0)" }.joined(separator: "\n            ")
     let caseOrdinalCases = cases.enumerated().map { index, c in
-        "case .\(escapeIdentifier(c.name)): \(index)"
+        "case .\(escapeIdentifier(c.name)): Ordinal_Primitives.Ordinal(\(index))"
     }.joined(separator: "\n                ")
     let uncheckedInitCases = cases.enumerated().map { index, c in
         if index == cases.count - 1 {
@@ -108,18 +108,18 @@ func generateEnumPrismMembers(for cases: [EnumCase], enumName: String) -> [DeclS
             \(raw: caseCases)
 
             @inlinable
-            public static var count: Int { \(raw: caseCount) }
+            public static var count: Cardinal_Primitives.Cardinal { Cardinal_Primitives.Cardinal(\(raw: caseCount)) }
 
             @inlinable
-            public var ordinal: Int {
+            public var ordinal: Ordinal_Primitives.Ordinal {
                 switch self {
                 \(raw: caseOrdinalCases)
                 }
             }
 
             @inlinable
-            public init(__unchecked: Void, ordinal: Int) {
-                switch ordinal {
+            public init(__unchecked: Void, ordinal: Ordinal_Primitives.Ordinal) {
+                switch ordinal.rawValue {
                 \(raw: uncheckedInitCases)
                 }
             }

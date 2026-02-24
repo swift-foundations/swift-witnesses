@@ -11,7 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Synchronization
-public import Reference_Primitives
+public import Ownership_Primitives
 
 extension Witness.Preparation {
     /// Thread-safe store for prepared witness values.
@@ -22,7 +22,7 @@ extension Witness.Preparation {
     /// ## Design
     ///
     /// - Pointer-backed internally to avoid existential overhead
-    /// - Uses `Reference.Box` for value storage (consistent with Values)
+    /// - Uses ``Ownership/Shared`` for value storage (consistent with Values)
     /// - Thread-safe via `Mutex`
     /// - Carried via `@TaskLocal` per [API-IMPL-010]
     ///
@@ -57,7 +57,7 @@ extension Witness.Preparation {
                 guard let ptr = unsafe storage[id] else {
                     return nil
                 }
-                return unsafe Unmanaged<Reference.Box<K.Value>>.fromOpaque(ptr)
+                return unsafe Unmanaged<Ownership.Shared<K.Value>>.fromOpaque(ptr)
                     .takeUnretainedValue()
                     .value
             }
@@ -78,7 +78,7 @@ extension Witness.Preparation {
                 }
 
                 // Store new value (retained)
-                let box = Reference.Box(value)
+                let box = Ownership.Shared(value)
                 let ptr = unsafe UnsafeRawPointer(Unmanaged.passRetained(box).toOpaque())
                 unsafe storage[id] = ptr
             }
@@ -95,7 +95,7 @@ extension Witness.Preparation {
                 guard let ptr = unsafe storage.removeValue(forKey: id) else {
                     return nil
                 }
-                let box = unsafe Unmanaged<Reference.Box<K.Value>>.fromOpaque(ptr)
+                let box = unsafe Unmanaged<Ownership.Shared<K.Value>>.fromOpaque(ptr)
                     .takeRetainedValue()
                 return box.value
             }

@@ -11,11 +11,16 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
-import Testing
 @testable import Witnesses
 
 extension Witness {
-    #Tests
+    @Suite
+    struct Test {
+        @Suite struct Unit {}
+        @Suite struct EdgeCase {}
+        @Suite struct Integration {}
+        @Suite(.serialized) struct Performance {}
+    }
 }
 
 // MARK: - Unit Tests
@@ -23,8 +28,8 @@ extension Witness {
 // under Witness.Test.Unit per [TEST-ORG-004].
 
 extension Witness.Test.Unit {
-    @Test("Key provides live and test values")
-    func keyProvidesValues() async throws {
+    @Test
+    func `Key provides live and test values`() async throws {
         let live = TestAPI.liveValue
         let test = TestAPI.testValue
 
@@ -35,8 +40,8 @@ extension Witness.Test.Unit {
         #expect(testResult == "Test result for 1")
     }
 
-    @Test("Default testValue falls back to liveValue")
-    func defaultTestValueFallback() async throws {
+    @Test
+    func `Default testValue falls back to liveValue`() async throws {
         // TestAPI explicitly defines testValue, so we verify the Key protocol contract
         let live = TestAPI.liveValue
         let test = TestAPI.testValue
@@ -50,22 +55,22 @@ extension Witness.Test.Unit {
 // MARK: - Edge Case Tests
 
 extension Witness.Test.EdgeCase {
-    @Test("Key works with zero id")
-    func keyZeroId() async throws {
+    @Test
+    func `Key works with zero id`() async throws {
         let api = TestAPI.liveValue
         let result = try await api.fetch(id: 0)
         #expect(result == "Live result for 0")
     }
 
-    @Test("Key works with negative id")
-    func keyNegativeId() async throws {
+    @Test
+    func `Key works with negative id`() async throws {
         let api = TestAPI.liveValue
         let result = try await api.fetch(id: -1)
         #expect(result == "Live result for -1")
     }
 
-    @Test("Key works with large id")
-    func keyLargeId() async throws {
+    @Test
+    func `Key works with large id`() async throws {
         let api = TestAPI.liveValue
         let result = try await api.fetch(id: Int.max)
         #expect(result == "Live result for \(Int.max)")

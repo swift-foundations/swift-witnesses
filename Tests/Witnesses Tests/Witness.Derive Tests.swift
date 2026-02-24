@@ -11,18 +11,23 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
-import Testing
 @testable import Witnesses
 
 extension Witness.Derive {
-    #Tests
+    @Suite
+    struct Test {
+        @Suite struct Unit {}
+        @Suite struct EdgeCase {}
+        @Suite struct Integration {}
+        @Suite(.serialized) struct Performance {}
+    }
 }
 
 // MARK: - Unit Tests
 
 extension Witness.Derive.Test.Unit {
-    @Test("Mock generates static method with value parameters")
-    func mockMethodExists() async throws {
+    @Test
+    func `Mock generates static method with value parameters`() async throws {
         // mock() takes values, not closures
         let api = MockableAPI.mock(
             fetchUser: "Test User",
@@ -41,8 +46,8 @@ extension Witness.Derive.Test.Unit {
         try await api.deleteUser(id: 1)
     }
 
-    @Test("Mock with all explicit values")
-    func mockWithAllValues() async throws {
+    @Test
+    func `Mock with all explicit values`() async throws {
         let api = MockableAPI.mock(
             fetchUser: "Explicit User",
             getCount: 100,
@@ -56,8 +61,8 @@ extension Witness.Derive.Test.Unit {
         #expect(count == 100)
     }
 
-    @Test("Mock returns same value for any input")
-    func mockReturnsSameValue() async throws {
+    @Test
+    func `Mock returns same value for any input`() async throws {
         let api = MockableAPI.mock(
             fetchUser: "Always This",
             getCount: 0
@@ -73,8 +78,8 @@ extension Witness.Derive.Test.Unit {
         #expect(user3 == "Always This")
     }
 
-    @Test("Mock also has unimplemented available")
-    func mockStillHasUnimplemented() async throws {
+    @Test
+    func `Mock also has unimplemented available`() async throws {
         // Both mock() and unimplemented() are available
         let mockApi = MockableAPI.mock(fetchUser: "Test", getCount: 0)
         let unimplApi = MockableAPI.unimplemented()
@@ -93,8 +98,8 @@ extension Witness.Derive.Test.Unit {
 // MARK: - Edge Case Tests
 
 extension Witness.Derive.Test.EdgeCase {
-    @Test("Mock with empty string value")
-    func emptyStringMock() async throws {
+    @Test
+    func `Mock with empty string value`() async throws {
         let api = MockableAPI.mock(
             fetchUser: "",
             getCount: 0
@@ -104,8 +109,8 @@ extension Witness.Derive.Test.EdgeCase {
         #expect(user == "")
     }
 
-    @Test("Mock with negative count")
-    func negativeCountMock() async throws {
+    @Test
+    func `Mock with negative count`() async throws {
         let api = MockableAPI.mock(
             fetchUser: "User",
             getCount: -1
@@ -115,8 +120,8 @@ extension Witness.Derive.Test.EdgeCase {
         #expect(count == -1)
     }
 
-    @Test("Mock with zero count")
-    func zeroCountMock() async throws {
+    @Test
+    func `Mock with zero count`() async throws {
         let api = MockableAPI.mock(
             fetchUser: "User",
             getCount: 0
@@ -126,8 +131,8 @@ extension Witness.Derive.Test.EdgeCase {
         #expect(count == 0)
     }
 
-    @Test("Mock with large count")
-    func largeCountMock() async throws {
+    @Test
+    func `Mock with large count`() async throws {
         let api = MockableAPI.mock(
             fetchUser: "User",
             getCount: Int.max
@@ -141,8 +146,8 @@ extension Witness.Derive.Test.EdgeCase {
 // MARK: - Integration Tests
 
 extension Witness.Derive.Test.Integration {
-    @Test("Mock in context scope")
-    func mockInContext() async throws {
+    @Test
+    func `Mock in context scope`() async throws {
         let mockApi = MockableAPI.mock(
             fetchUser: "Context User",
             getCount: 42
@@ -157,8 +162,8 @@ extension Witness.Derive.Test.Integration {
         }
     }
 
-    @Test("Multiple mock instances are independent")
-    func multipleMockInstances() async throws {
+    @Test
+    func `Multiple mock instances are independent`() async throws {
         let mock1 = MockableAPI.mock(fetchUser: "User 1", getCount: 1)
         let mock2 = MockableAPI.mock(fetchUser: "User 2", getCount: 2)
 
@@ -173,24 +178,28 @@ extension Witness.Derive.Test.Integration {
 // MARK: - Performance Tests
 
 extension Witness.Derive.Test.Performance {
-    @Test("Mock creation", .timed(iterations: 1000, warmup: 100))
-    func mockCreation() {
+    @Test
+    func `Mock creation`() {
+        // Warmup
         for _ in 0..<100 {
-            _ = MockableAPI.mock(
-                fetchUser: "User",
-                getCount: 42
-            )
+            _ = MockableAPI.mock(fetchUser: "User", getCount: 42)
+        }
+        // Measured
+        for _ in 0..<1000 {
+            _ = MockableAPI.mock(fetchUser: "User", getCount: 42)
         }
     }
 
-    @Test("Mock invocation", .timed(iterations: 1000, warmup: 100))
-    func mockInvocation() async throws {
-        let api = MockableAPI.mock(
-            fetchUser: "User",
-            getCount: 42
-        )
+    @Test
+    func `Mock invocation`() async throws {
+        let api = MockableAPI.mock(fetchUser: "User", getCount: 42)
 
+        // Warmup
         for _ in 0..<100 {
+            _ = try await api.fetchUser(id: 1)
+        }
+        // Measured
+        for _ in 0..<1000 {
             _ = try await api.fetchUser(id: 1)
         }
     }

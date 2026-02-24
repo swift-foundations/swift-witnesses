@@ -11,18 +11,23 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
-import Testing
 @testable import Witnesses
 
 extension Witness.Unimplemented {
-    #Tests
+    @Suite
+    struct Test {
+        @Suite struct Unit {}
+        @Suite struct EdgeCase {}
+        @Suite struct Integration {}
+        @Suite(.serialized) struct Performance {}
+    }
 }
 
 // MARK: - Unit Tests
 
 extension Witness.Unimplemented.Test.Unit {
-    @Test("Macro-generated unimplemented throws on invocation")
-    func macroGeneratedUnimplemented() async throws {
+    @Test
+    func `Macro-generated unimplemented throws on invocation`() async throws {
         let api = TestAPI.unimplemented()
 
         // Calling fetch should throw Witness.Unimplemented.Error
@@ -36,8 +41,8 @@ extension Witness.Unimplemented.Test.Unit {
         }
     }
 
-    @Test("Macro-generated unimplemented error contains correct info")
-    func macroGeneratedUnimplementedErrorInfo() async throws {
+    @Test
+    func `Macro-generated unimplemented error contains correct info`() async throws {
         let api = TestAPI.unimplemented()
 
         do {
@@ -49,8 +54,8 @@ extension Witness.Unimplemented.Test.Unit {
         }
     }
 
-    @Test("Unimplemented witness can be partially overridden")
-    func partialOverride() async throws {
+    @Test
+    func `Unimplemented witness can be partially overridden`() async throws {
         var api = TestAPI.unimplemented()
 
         // Override only fetch
@@ -70,8 +75,8 @@ extension Witness.Unimplemented.Test.Unit {
 // MARK: - Edge Case Tests
 
 extension Witness.Unimplemented.Test.EdgeCase {
-    @Test("Multiple unimplemented calls have independent locations")
-    func independentLocations() async throws {
+    @Test
+    func `Multiple unimplemented calls have independent locations`() async throws {
         let api1 = TestAPI.unimplemented()
         let api2 = TestAPI.unimplemented()
 
@@ -89,8 +94,8 @@ extension Witness.Unimplemented.Test.EdgeCase {
         }
     }
 
-    @Test("Override then call non-overridden operation")
-    func overrideThenCallOther() async throws {
+    @Test
+    func `Override then call non-overridden operation`() async throws {
         var api = TestAPI.unimplemented()
         api.fetch = { _ in "overridden" }
 
@@ -108,8 +113,8 @@ extension Witness.Unimplemented.Test.EdgeCase {
 // MARK: - Integration Tests
 
 extension Witness.Unimplemented.Test.Integration {
-    @Test("Unimplemented in context scope")
-    func unimplementedInContext() async throws {
+    @Test
+    func `Unimplemented in context scope`() async throws {
         try await Witness.Context.with { values in
             values[TestAPI.self] = .unimplemented()
         } operation: {
@@ -120,8 +125,8 @@ extension Witness.Unimplemented.Test.Integration {
         }
     }
 
-    @Test("Partially overridden unimplemented in context")
-    func partiallyOverriddenInContext() async throws {
+    @Test
+    func `Partially overridden unimplemented in context`() async throws {
         var unimpl = TestAPI.unimplemented()
         unimpl.fetch = { id in "Context mocked \(id)" }
 

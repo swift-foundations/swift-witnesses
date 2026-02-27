@@ -28,7 +28,9 @@ extension Witness.Unimplemented.Error {
 extension Witness.Unimplemented.Error.Test.Unit {
     @Test
     func `Error stores witness, operation, and location`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
         let error = Witness.Unimplemented.Error(
             witness: "FileSystem",
             operation: "open(path:flags:)",
@@ -39,11 +41,14 @@ extension Witness.Unimplemented.Error.Test.Unit {
         #expect(error.operation == "open(path:flags:)")
         #expect(error.location.fileID == "Test.swift")
         #expect(error.location.line == 42)
+        #expect(error.location.column == 7)
     }
 
     @Test
     func `Error description contains all info`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
         let error = Witness.Unimplemented.Error(
             witness: "FileSystem",
             operation: "open(path:flags:)",
@@ -54,11 +59,14 @@ extension Witness.Unimplemented.Error.Test.Unit {
         #expect(error.description.contains("not implemented"))
         #expect(error.description.contains("Test.swift"))
         #expect(error.description.contains("42"))
+        #expect(error.description.contains("7"))
     }
 
     @Test
     func `Error conforms to Swift.Error`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
         let error: any Swift.Error = Witness.Unimplemented.Error(
             witness: "Test",
             operation: "test()",
@@ -70,7 +78,9 @@ extension Witness.Unimplemented.Error.Test.Unit {
 
     @Test
     func `Error is Sendable`() async {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
         let error = Witness.Unimplemented.Error(
             witness: "FileSystem",
             operation: "open(path:flags:)",
@@ -88,7 +98,9 @@ extension Witness.Unimplemented.Error.Test.Unit {
 extension Witness.Unimplemented.Error.Test.EdgeCase {
     @Test
     func `Error with empty witness name`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 1)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 1, column: 1
+        )
         let error = Witness.Unimplemented.Error(
             witness: "",
             operation: "test()",
@@ -101,7 +113,9 @@ extension Witness.Unimplemented.Error.Test.EdgeCase {
 
     @Test
     func `Error with empty operation name`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 1)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 1, column: 1
+        )
         let error = Witness.Unimplemented.Error(
             witness: "Test",
             operation: "",
@@ -114,7 +128,9 @@ extension Witness.Unimplemented.Error.Test.EdgeCase {
 
     @Test
     func `Error with complex operation signature`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 1)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 1, column: 1
+        )
         let error = Witness.Unimplemented.Error(
             witness: "NetworkClient",
             operation: "send(request:headers:timeout:retryPolicy:)",
@@ -127,7 +143,9 @@ extension Witness.Unimplemented.Error.Test.EdgeCase {
 
     @Test
     func `Error with unicode in names`() {
-        let location = Witness.Unimplemented.Location(fileID: "测试.swift", line: 1)
+        let location = Source.Location(
+            fileID: "测试.swift", line: 1, column: 1
+        )
         let error = Witness.Unimplemented.Error(
             witness: "文件系统",
             operation: "打开(路径:)",
@@ -144,8 +162,12 @@ extension Witness.Unimplemented.Error.Test.EdgeCase {
 extension Witness.Unimplemented.Error.Test.Integration {
     @Test
     func `Error equality`() {
-        let loc1 = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
-        let loc2 = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let loc1 = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
+        let loc2 = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
 
         let err1 = Witness.Unimplemented.Error(witness: "A", operation: "b()", location: loc1)
         let err2 = Witness.Unimplemented.Error(witness: "A", operation: "b()", location: loc2)
@@ -157,7 +179,9 @@ extension Witness.Unimplemented.Error.Test.Integration {
 
     @Test
     func `Error hashability`() {
-        let loc = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let loc = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
         let err1 = Witness.Unimplemented.Error(witness: "A", operation: "b()", location: loc)
         let err2 = Witness.Unimplemented.Error(witness: "A", operation: "b()", location: loc)
 
@@ -193,7 +217,9 @@ extension Witness.Unimplemented.Error.Test.Integration {
 extension Witness.Unimplemented.Error.Test.Performance {
     @Test
     func `Error creation`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
         // Warmup
         for _ in 0..<100 {
             _ = Witness.Unimplemented.Error(
@@ -214,7 +240,9 @@ extension Witness.Unimplemented.Error.Test.Performance {
 
     @Test
     func `Error description generation`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
         let error = Witness.Unimplemented.Error(
             witness: "FileSystem",
             operation: "open(path:flags:)",

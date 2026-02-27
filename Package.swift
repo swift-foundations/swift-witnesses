@@ -25,6 +25,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0"),
         .package(path: "../../swift-primitives/swift-witness-primitives"),
+        .package(path: "../../swift-primitives/swift-source-primitives"),
         .package(path: "../../swift-primitives/swift-optic-primitives"),
         .package(path: "../../swift-primitives/swift-finite-primitives"),
         .package(path: "../../swift-primitives/swift-ownership-primitives"),
@@ -36,6 +37,7 @@ let package = Package(
             dependencies: [
                 "Witnesses Macros",
                 .product(name: "Witness Primitives", package: "swift-witness-primitives"),
+                .product(name: "Source Primitives", package: "swift-source-primitives"),
                 .product(name: "Ownership Primitives", package: "swift-ownership-primitives"),
                 .product(name: "Cache Primitives", package: "swift-cache-primitives"),
             ]
@@ -74,6 +76,7 @@ for target in package.targets where ![.system, .binary, .plugin, .macro].contain
         .enableUpcomingFeature("ExistentialAny"),
         .enableUpcomingFeature("InternalImportsByDefault"),
         .enableUpcomingFeature("MemberImportVisibility"),
+        .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
         .enableExperimentalFeature("Lifetimes"),
         .enableExperimentalFeature("SuppressedAssociatedTypes"),
         .enableExperimentalFeature("SuppressedAssociatedTypesWithDefaults"),

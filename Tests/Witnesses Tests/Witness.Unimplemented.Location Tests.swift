@@ -13,38 +13,51 @@
 import Testing
 @testable import Witnesses
 
-extension Witness.Unimplemented.Location {
-    @Suite
-    struct Test {
-        @Suite struct Unit {}
-        @Suite struct EdgeCase {}
-        @Suite struct Integration {}
-        @Suite(.serialized) struct Performance {}
-    }
+@Suite("Source.Location")
+struct WitnessUnimplementedLocationTests {
+    @Suite struct Unit {}
+    @Suite struct EdgeCase {}
+    @Suite struct Integration {}
+    @Suite(.serialized) struct Performance {}
 }
 
 // MARK: - Unit Tests
 
-extension Witness.Unimplemented.Location.Test.Unit {
+extension WitnessUnimplementedLocationTests.Unit {
     @Test
-    func `Location stores fileID and line`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+    func `Location stores fileID, filePath, line, and column`() {
+        let location = Source.Location(
+            fileID: "Test.swift",
+            filePath: "/path/Test.swift",
+            line: 42,
+            column: 7
+        )
 
         #expect(location.fileID == "Test.swift")
+        #expect(location.filePath == "/path/Test.swift")
         #expect(location.line == 42)
+        #expect(location.column == 7)
     }
 
     @Test
     func `Location uses default values from call site`() {
-        let location = Witness.Unimplemented.Location()
+        let location = Source.Location(
+            fileID: #fileID,
+            filePath: #filePath,
+            line: #line,
+            column: #column
+        )
 
-        #expect(location.fileID.contains("Witness.Unimplemented.Location Tests"))
+        #expect(location.fileID.contains("Unimplemented.Location Tests"))
         #expect(location.line > 0)
+        #expect(location.column > 0)
     }
 
     @Test
     func `Location is Sendable`() async {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
 
         await Task {
             #expect(location.fileID == "Test.swift")
@@ -55,47 +68,65 @@ extension Witness.Unimplemented.Location.Test.Unit {
 
 // MARK: - Edge Case Tests
 
-extension Witness.Unimplemented.Location.Test.EdgeCase {
+extension WitnessUnimplementedLocationTests.EdgeCase {
     @Test
     func `Location with empty fileID`() {
-        let location = Witness.Unimplemented.Location(fileID: "", line: 1)
+        let location = Source.Location(
+            fileID: "", line: 1, column: 1
+        )
         #expect(location.fileID == "")
     }
 
     @Test
     func `Location with zero line`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: 0)
+        let location = Source.Location(
+            fileID: "Test.swift", line: 0, column: 1
+        )
         #expect(location.line == 0)
     }
 
     @Test
-    func `Location with negative line`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: -1)
-        #expect(location.line == -1)
-    }
-
-    @Test
     func `Location with large line number`() {
-        let location = Witness.Unimplemented.Location(fileID: "Test.swift", line: Int.max)
-        #expect(location.line == Int.max)
+        let location = Source.Location(
+            fileID: "Test.swift", line: Int(UInt32.max), column: 1
+        )
+        #expect(location.line == Int(UInt32.max))
     }
 
     @Test
     func `Location with unicode in fileID`() {
-        let location = Witness.Unimplemented.Location(fileID: "测试.swift", line: 1)
+        let location = Source.Location(
+            fileID: "测试.swift", line: 1, column: 1
+        )
         #expect(location.fileID == "测试.swift")
+    }
+
+    @Test
+    func `Location filePath defaults to nil`() {
+        let location = Source.Location(
+            fileID: "Test.swift", line: 1, column: 1
+        )
+        #expect(location.filePath == nil)
     }
 }
 
 // MARK: - Integration Tests
 
-extension Witness.Unimplemented.Location.Test.Integration {
+extension WitnessUnimplementedLocationTests.Integration {
     @Test
     func `Location equality`() {
-        let loc1 = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
-        let loc2 = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
-        let loc3 = Witness.Unimplemented.Location(fileID: "Other.swift", line: 42)
-        let loc4 = Witness.Unimplemented.Location(fileID: "Test.swift", line: 100)
+        let loc1 = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
+        let loc2 = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
+        let loc3 = Source.Location(
+            fileID: "Other.swift", line: 42, column: 7
+        )
+        let loc4 = Source.Location(
+            fileID: "Test.swift", line: 100, column: 7
+        )
 
         #expect(loc1 == loc2)
         #expect(loc1 != loc3)
@@ -104,10 +135,14 @@ extension Witness.Unimplemented.Location.Test.Integration {
 
     @Test
     func `Location hashability`() {
-        let loc1 = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
-        let loc2 = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+        let loc1 = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
+        let loc2 = Source.Location(
+            fileID: "Test.swift", line: 42, column: 7
+        )
 
-        var set: Set<Witness.Unimplemented.Location> = []
+        var set: Set<Source.Location> = []
         set.insert(loc1)
         set.insert(loc2)
 
@@ -117,17 +152,21 @@ extension Witness.Unimplemented.Location.Test.Integration {
 
 // MARK: - Performance Tests
 
-extension Witness.Unimplemented.Location.Test.Performance {
+extension WitnessUnimplementedLocationTests.Performance {
     @Test
     func `Location creation`() {
         // Warmup
         for _ in 0..<100 {
-            _ = Witness.Unimplemented.Location(fileID: "Test.swift", line: 42)
+            _ = Source.Location(
+                fileID: "Test.swift", line: 42, column: 7
+            )
         }
         // Measured
         for _ in 0..<1000 {
             for i in 0..<100 {
-                _ = Witness.Unimplemented.Location(fileID: "Test.swift", line: i)
+                _ = Source.Location(
+                    fileID: "Test.swift", line: i, column: 1
+                )
             }
         }
     }

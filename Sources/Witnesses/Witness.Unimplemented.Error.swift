@@ -25,7 +25,7 @@ extension Witness.Unimplemented {
         public let operation: String
 
         /// The source location where the unimplemented witness was created.
-        public let location: Location
+        public let location: Source.Location
 
         /// Creates an unimplemented error.
         ///
@@ -34,7 +34,7 @@ extension Witness.Unimplemented {
         ///   - operation: The name of the operation called (e.g., "open(path:flags:)").
         ///   - location: The source location where `unimplemented()` was called.
         @inlinable
-        public init(witness: String, operation: String, location: Location) {
+        public init(witness: String, operation: String, location: Source.Location) {
             self.witness = witness
             self.operation = operation
             self.location = location
@@ -44,6 +44,6 @@ extension Witness.Unimplemented {
 
 extension Witness.Unimplemented.Error: CustomStringConvertible {
     public var description: String {
-        "\(witness).\(operation) is not implemented (created at \(location.fileID):\(location.line))"
+        "\(witness).\(operation) is not implemented (created at \(location))"
     }
 }

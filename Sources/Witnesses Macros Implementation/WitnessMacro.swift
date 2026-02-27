@@ -297,9 +297,13 @@ extension WitnessMacro: ExtensionMacro {
                 @inlinable
                 \(raw: accessModifier)static func unimplemented(
                     fileID: String = #fileID,
-                    line: Int = #line
+                    filePath: String = #filePath,
+                    line: Int = #line,
+                    column: Int = #column
                 ) -> Self {
-                    let location = Witness.Unimplemented.Location(fileID: fileID, line: line)
+                    let location = Source.Location(
+                        fileID: fileID, filePath: filePath, line: line, column: column
+                    )
                     return Self(
                         \(raw: closureInits)
                     )

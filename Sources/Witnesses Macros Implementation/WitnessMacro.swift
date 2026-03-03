@@ -120,8 +120,11 @@ extension WitnessMacro: MemberMacro {
         // Determine access level
         let isPublic = structDecl.modifiers.contains { $0.name.tokenKind == .keyword(.public) }
 
-        // Generate public initializer if needed
-        if isPublic {
+        // Generate public initializer if needed (skip if struct already has one)
+        let hasExistingInit = structDecl.memberBlock.members.contains { member in
+            member.decl.is(InitializerDeclSyntax.self)
+        }
+        if isPublic && !hasExistingInit {
             members.append(generatePublicInit(for: closureProperties, structDecl: structDecl))
         }
 
@@ -136,7 +139,8 @@ extension WitnessMacro: MemberMacro {
         members.append(generateActionEnum(for: closureProperties))
 
         // Generate Observe accessor struct and property
-        members.append(generateObserveStruct(for: closureProperties, structName: structDecl.name.text))
+        let nonClosureProperties = extractNonClosureProperties(from: structDecl)
+        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structDecl.name.text))
         members.append(generateObserveProperty())
 
         // Generate callAsFunction if .generator is specified and there's exactly one closure
@@ -193,13 +197,16 @@ extension WitnessMacro: MemberAttributeMacro {
 
         // Only deprecate if the closure has labeled parameters
         let hasLabels = functionType.parameters.contains { param in
-            param.secondName != nil
+            param.secondName != nil ||
+            (param.firstName != nil && param.firstName?.tokenKind != .wildcard)
         }
 
         guard hasLabels else { return [] }
 
+        let rawName = identifier.identifier.text
+        let strippedName = rawName.hasPrefix("_") ? String(rawName.dropFirst()) : rawName
         let methodSignature = generateMethodSignature(
-            name: identifier.identifier.text,
+            name: strippedName,
             functionType: functionType
         )
 
@@ -279,10 +286,32 @@ extension WitnessMacro: ExtensionMacro {
         let isPublic = structDecl.modifiers.contains { $0.name.tokenKind == .keyword(.public) }
         let accessModifier = isPublic ? "public " : ""
 
+        let nonClosureProps = extractNonClosureProperties(from: structDecl)
+
         // Generate closure initializers that throw Witness.Unimplemented.Error
         let closureInits = closureProperties.map { property in
             generateUnimplementedClosure(for: property, structName: structName)
         }.joined(separator: ",\n            ")
+
+        // Build parameter list: non-closure params first, then source location defaults
+        let nonClosureParamList = nonClosureProps.map { "\($0.name): \($0.type)" }
+        let sourceLocationParams = [
+            "fileID: String = #fileID",
+            "filePath: String = #filePath",
+            "line: Int = #line",
+            "column: Int = #column"
+        ]
+        let allParams = (nonClosureParamList + sourceLocationParams)
+            .joined(separator: ",\n            ")
+
+        // Build init argument list: non-closure params + closure inits
+        let nonClosureInits = nonClosureProps.map { "\($0.name): \($0.name)" }
+        let allInits: String
+        if nonClosureInits.isEmpty {
+            allInits = closureInits
+        } else {
+            allInits = nonClosureInits.joined(separator: ",\n            ") + ",\n            " + closureInits
+        }
 
         return try ExtensionDeclSyntax(
             """
@@ -296,16 +325,13 @@ extension WitnessMacro: ExtensionMacro {
                 /// ```
                 @inlinable
                 \(raw: accessModifier)static func unimplemented(
-                    fileID: String = #fileID,
-                    filePath: String = #filePath,
-                    line: Int = #line,
-                    column: Int = #column
+                    \(raw: allParams)
                 ) -> Self {
                     let location = Source.Location(
                         fileID: fileID, filePath: filePath, line: line, column: column
                     )
                     return Self(
-                        \(raw: closureInits)
+                        \(raw: allInits)
                     )
                 }
             }
@@ -322,16 +348,32 @@ extension WitnessMacro: ExtensionMacro {
         let isPublic = structDecl.modifiers.contains { $0.name.tokenKind == .keyword(.public) }
         let accessModifier = isPublic ? "public " : ""
 
+        let nonClosureProps = extractNonClosureProperties(from: structDecl)
+
         // Generate parameters for mock() - takes VALUES, not closures
         // Void returns get default value of (), non-Void are required
         let mockParameters = closureProperties.map { property in
             generateMockParameter(for: property)
-        }.joined(separator: ",\n            ")
+        }
+
+        // Non-closure params first, then mock value params
+        let nonClosureParamList = nonClosureProps.map { "\($0.name): \($0.type)" }
+        let allParams = (nonClosureParamList + mockParameters)
+            .joined(separator: ",\n            ")
 
         // Generate closure initializers that return the mock values
         let closureInits = closureProperties.map { property in
             generateMockClosure(for: property)
         }.joined(separator: ",\n                ")
+
+        // Build init arguments: non-closure + closure
+        let nonClosureInits = nonClosureProps.map { "\($0.name): \($0.name)" }
+        let allInits: String
+        if nonClosureInits.isEmpty {
+            allInits = closureInits
+        } else {
+            allInits = nonClosureInits.joined(separator: ",\n                ") + ",\n                " + closureInits
+        }
 
         return try ExtensionDeclSyntax(
             """
@@ -346,10 +388,10 @@ extension WitnessMacro: ExtensionMacro {
                 /// For Void-returning operations, the parameter defaults to `()`.
                 @inlinable
                 \(raw: accessModifier)static func mock(
-                    \(raw: mockParameters)
+                    \(raw: allParams)
                 ) -> Self {
                     Self(
-                        \(raw: closureInits)
+                        \(raw: allInits)
                     )
                 }
             }
@@ -418,9 +460,9 @@ private func generateMockParameter(for property: ClosureProperty) -> String {
     let isVoid = returnType == "Void" || returnType == "()"
 
     if isVoid {
-        return "\(property.name): Void = ()"
+        return "\(property.methodName): Void = ()"
     } else {
-        return "\(property.name): \(returnType)"
+        return "\(property.methodName): \(returnType)"
     }
 }
 
@@ -446,7 +488,7 @@ private func generateMockClosure(for property: ClosureProperty) -> String {
         if isVoid {
             return "\(property.name): { () \(throwsAnnotation)-> \(returnType) in }"
         } else {
-            return "\(property.name): { () \(throwsAnnotation)-> \(returnType) in \(property.name) }"
+            return "\(property.name): { () \(throwsAnnotation)-> \(returnType) in \(property.methodName) }"
         }
     } else {
         // Has parameters: { (_, _) throws(E) -> T in value }
@@ -454,7 +496,7 @@ private func generateMockClosure(for property: ClosureProperty) -> String {
         if isVoid {
             return "\(property.name): { (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in }"
         } else {
-            return "\(property.name): { (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in \(property.name) }"
+            return "\(property.name): { (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in \(property.methodName) }"
         }
     }
 }
@@ -471,6 +513,14 @@ struct ClosureProperty {
     /// The typed error type if present (e.g., "MyError" from "throws(MyError)")
     let throwsType: TypeSyntax?
     let returnType: TypeSyntax
+
+    /// The public method name: strips leading `_` from `name`.
+    var methodName: String {
+        if name.hasPrefix("_") {
+            return String(name.dropFirst())
+        }
+        return name
+    }
 }
 
 struct ClosureParameter {
@@ -478,6 +528,17 @@ struct ClosureParameter {
     let internalName: String
     let type: TypeSyntax
     let isInout: Bool
+    /// `.borrowing` or `.consuming`, `nil` for default/`inout`
+    let ownership: Keyword?
+
+    /// The base type without ownership specifiers (`inout`/`borrowing`/`consuming`).
+    var baseType: TypeSyntax {
+        if isInout || ownership != nil,
+           let attributed = type.as(AttributedTypeSyntax.self) {
+            return attributed.baseType
+        }
+        return type
+    }
 }
 
 private func extractClosureProperties(from structDecl: StructDeclSyntax) -> [ClosureProperty] {
@@ -485,7 +546,8 @@ private func extractClosureProperties(from structDecl: StructDeclSyntax) -> [Clo
 
     for member in structDecl.memberBlock.members {
         guard let varDecl = member.decl.as(VariableDeclSyntax.self),
-              varDecl.bindingSpecifier.tokenKind == .keyword(.var),
+              (varDecl.bindingSpecifier.tokenKind == .keyword(.var) ||
+               varDecl.bindingSpecifier.tokenKind == .keyword(.let)),
               let binding = varDecl.bindings.first,
               let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
               let typeAnnotation = binding.typeAnnotation,
@@ -532,18 +594,43 @@ private func extractParameters(from functionType: FunctionTypeSyntax) -> [Closur
     var parameters: [ClosureParameter] = []
 
     for (index, param) in functionType.parameters.enumerated() {
-        let label = param.secondName?.text
+        let label: String? = {
+            if let second = param.secondName?.text {
+                return second
+            }
+            if let first = param.firstName?.text, first != "_" {
+                return first
+            }
+            return nil
+        }()
         let internalName = label ?? "p\(index)"
-        let isInout = param.type.is(AttributedTypeSyntax.self) &&
-            param.type.as(AttributedTypeSyntax.self)?.specifiers.contains(where: {
-                $0.as(SimpleTypeSpecifierSyntax.self)?.specifier.tokenKind == .keyword(.inout)
-            }) == true
+
+        var isInout = false
+        var ownership: Keyword? = nil
+
+        if let attributed = param.type.as(AttributedTypeSyntax.self) {
+            for specifier in attributed.specifiers {
+                if let simple = specifier.as(SimpleTypeSpecifierSyntax.self) {
+                    switch simple.specifier.tokenKind {
+                    case .keyword(.inout):
+                        isInout = true
+                    case .keyword(.borrowing):
+                        ownership = .borrowing
+                    case .keyword(.consuming):
+                        ownership = .consuming
+                    default:
+                        break
+                    }
+                }
+            }
+        }
 
         parameters.append(ClosureParameter(
             label: label,
             internalName: internalName,
             type: param.type,
-            isInout: isInout
+            isInout: isInout,
+            ownership: ownership
         ))
     }
 
@@ -553,31 +640,37 @@ private func extractParameters(from functionType: FunctionTypeSyntax) -> [Closur
 // MARK: - Public Init Generation
 
 private func generatePublicInit(for properties: [ClosureProperty], structDecl: StructDeclSyntax) -> DeclSyntax {
-    // Extract full type syntax from the struct's member declarations
-    var fullTypes: [String: String] = [:]
+    var initParameters: [String] = []
+    var assignments: [String] = []
+
     for member in structDecl.memberBlock.members {
-        if let varDecl = member.decl.as(VariableDeclSyntax.self),
-           let binding = varDecl.bindings.first,
-           let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
-           let typeAnnotation = binding.typeAnnotation {
-            fullTypes[identifier.identifier.text] = typeAnnotation.type.trimmedDescription
+        guard let varDecl = member.decl.as(VariableDeclSyntax.self),
+              let binding = varDecl.bindings.first,
+              binding.accessorBlock == nil,
+              let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
+              let typeAnnotation = binding.typeAnnotation else {
+            continue
         }
+
+        let name = identifier.identifier.text
+        let type = typeAnnotation.type.trimmedDescription
+
+        if extractFunctionType(from: typeAnnotation.type) != nil {
+            initParameters.append("\(name): @escaping \(type)")
+        } else {
+            initParameters.append("\(name): \(type)")
+        }
+        assignments.append("self.\(name) = \(name)")
     }
 
-    let parameters = properties.map { property in
-        let fullType = fullTypes[property.name] ?? "\(property.functionType)"
-        return "\(property.name): @escaping \(fullType)"
-    }.joined(separator: ",\n        ")
-
-    let assignments = properties.map { property in
-        "self.\(property.name) = \(property.name)"
-    }.joined(separator: "\n        ")
+    let parameterList = initParameters.joined(separator: ",\n        ")
+    let assignmentList = assignments.joined(separator: "\n        ")
 
     return """
         public init(
-            \(raw: parameters)
+            \(raw: parameterList)
         ) {
-            \(raw: assignments)
+            \(raw: assignmentList)
         }
         """
 }
@@ -614,7 +707,7 @@ private func generateMethod(for property: ClosureProperty) -> DeclSyntax? {
 
     return """
         @inlinable
-        public func \(raw: property.name)(\(raw: parameters))\(raw: effectSpecifiers)\(raw: returnClause) {
+        public func \(raw: property.methodName)(\(raw: parameters))\(raw: effectSpecifiers)\(raw: returnClause) {
             \(raw: tryKeyword)\(raw: awaitKeyword)self.\(raw: property.name)(\(raw: callArguments))
         }
         """
@@ -658,7 +751,9 @@ private func generateCallAsFunction(for property: ClosureProperty) -> DeclSyntax
 
 private func generateMethodSignature(name: String, functionType: FunctionTypeSyntax) -> String {
     let labels = functionType.parameters.enumerated().map { index, param in
-        param.secondName?.text ?? "_"
+        if let second = param.secondName?.text { return second }
+        if let first = param.firstName?.text, first != "_" { return first }
+        return "_"
     }
 
     if labels.isEmpty {
@@ -674,46 +769,46 @@ private func generateMethodSignature(name: String, functionType: FunctionTypeSyn
 private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax {
     let caseCount = properties.count
 
-    // Generate Action cases (inputs only)
+    // Generate Action cases (inputs only, ownership specifiers stripped)
     let actionCases = properties.map { property in
         if property.parameters.isEmpty {
-            return "case \(property.name)"
+            return "case \(property.methodName)"
         }
 
         let associatedValues = property.parameters.enumerated().map { index, param in
             if let label = param.label {
-                return "\(label): \(param.type)"
+                return "\(label): \(param.baseType)"
             } else {
-                return "\(param.type)"
+                return "\(param.baseType)"
             }
         }.joined(separator: ", ")
 
-        return "case \(property.name)(\(associatedValues))"
+        return "case \(property.methodName)(\(associatedValues))"
     }.joined(separator: "\n            ")
 
     // Generate Case enum cases (no associated values)
-    let caseCases = properties.map { "case \($0.name)" }.joined(separator: "\n                ")
+    let caseCases = properties.map { "case \($0.methodName)" }.joined(separator: "\n                ")
 
     // Generate Case.ordinal switch
     let caseOrdinalCases = properties.enumerated().map { index, property in
-        "case .\(property.name): Ordinal_Primitives.Ordinal(\(index))"
+        "case .\(property.methodName): Ordinal_Primitives.Ordinal(\(index))"
     }.joined(separator: "\n                    ")
 
     // Generate Case.init(__unchecked:ordinal:) switch - last case is default
     let caseInitCases: String
     if properties.count == 1 {
-        caseInitCases = "default: self = .\(properties[0].name)"
+        caseInitCases = "default: self = .\(properties[0].methodName)"
     } else {
         let explicitCases = properties.dropLast().enumerated().map { index, property in
-            "case \(index): self = .\(property.name)"
+            "case \(index): self = .\(property.methodName)"
         }.joined(separator: "\n                    ")
-        let defaultCase = "default: self = .\(properties.last!.name)"
+        let defaultCase = "default: self = .\(properties.last!.methodName)"
         caseInitCases = explicitCases + "\n                    " + defaultCase
     }
 
     // Generate Action.case property switch
     let actionCaseCases = properties.map { property in
-        "case .\(property.name): .\(property.name)"
+        "case .\(property.methodName): .\(property.methodName)"
     }.joined(separator: "\n                ")
 
     // Generate Prisms struct properties
@@ -819,7 +914,7 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
 private func generateTypedResultCase(for property: ClosureProperty) -> String {
     let returnType = property.returnType.trimmedDescription
     let errorType = property.throwsType?.trimmedDescription ?? "Never"
-    return "case \(property.name)(Swift.Result<\(returnType), \(errorType)>)"
+    return "case \(property.methodName)(Swift.Result<\(returnType), \(errorType)>)"
 }
 
 /// Generates prism properties for each closure property.
@@ -834,35 +929,35 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
     if property.parameters.isEmpty {
         // Case with no associated values - prism to Void
         return """
-        public var \(property.name): Optic_Primitives.Optic.Prism<Action, Void> {
+        public var \(property.methodName): Optic_Primitives.Optic.Prism<Action, Void> {
                     Optic_Primitives.Optic.Prism(
-                        embed: { _ in .\(property.name) },
-                        extract: { if case .\(property.name) = $0 { return () } else { return nil } }
+                        embed: { _ in .\(property.methodName) },
+                        extract: { if case .\(property.methodName) = $0 { return () } else { return nil } }
                     )
                 }
         """
     } else if property.parameters.count == 1 {
-        // Single parameter - prism directly to that type
+        // Single parameter - prism directly to that type (ownership stripped)
         let param = property.parameters[0]
-        let paramType = param.type.trimmedDescription
+        let paramType = param.baseType.trimmedDescription
         let embedArg = param.label != nil ? "\(param.label!): $0" : "$0"
         let extractPattern = param.label != nil ? "\(param.label!): let v" : "let v"
 
         return """
-        public var \(property.name): Optic_Primitives.Optic.Prism<Action, \(paramType)> {
+        public var \(property.methodName): Optic_Primitives.Optic.Prism<Action, \(paramType)> {
                     Optic_Primitives.Optic.Prism(
-                        embed: { .\(property.name)(\(embedArg)) },
-                        extract: { if case .\(property.name)(\(extractPattern)) = $0 { return v } else { return nil } }
+                        embed: { .\(property.methodName)(\(embedArg)) },
+                        extract: { if case .\(property.methodName)(\(extractPattern)) = $0 { return v } else { return nil } }
                     )
                 }
         """
     } else {
-        // Multiple parameters - prism to a labeled tuple
+        // Multiple parameters - prism to a labeled tuple (ownership stripped)
         let tupleTypes = property.parameters.map { param in
             if let label = param.label {
-                return "\(label): \(param.type.trimmedDescription)"
+                return "\(label): \(param.baseType.trimmedDescription)"
             } else {
-                return param.type.trimmedDescription
+                return param.baseType.trimmedDescription
             }
         }.joined(separator: ", ")
 
@@ -891,14 +986,40 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
         }.joined(separator: ", ")
 
         return """
-        public var \(property.name): Optic_Primitives.Optic.Prism<Action, (\(tupleTypes))> {
+        public var \(property.methodName): Optic_Primitives.Optic.Prism<Action, (\(tupleTypes))> {
                     Optic_Primitives.Optic.Prism(
-                        embed: { .\(property.name)(\(embedArgs)) },
-                        extract: { if case .\(property.name)(\(extractPatterns)) = $0 { return (\(extractTuple)) } else { return nil } }
+                        embed: { .\(property.methodName)(\(embedArgs)) },
+                        extract: { if case .\(property.methodName)(\(extractPatterns)) = $0 { return (\(extractTuple)) } else { return nil } }
                     )
                 }
         """
     }
+}
+
+// MARK: - Non-Closure Property Extraction
+
+struct NonClosureProperty {
+    let name: String
+    let type: String
+}
+
+private func extractNonClosureProperties(from structDecl: StructDeclSyntax) -> [NonClosureProperty] {
+    var properties: [NonClosureProperty] = []
+    for member in structDecl.memberBlock.members {
+        guard let varDecl = member.decl.as(VariableDeclSyntax.self),
+              let binding = varDecl.bindings.first,
+              binding.accessorBlock == nil,
+              let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
+              let typeAnnotation = binding.typeAnnotation,
+              extractFunctionType(from: typeAnnotation.type) == nil else {
+            continue
+        }
+        properties.append(NonClosureProperty(
+            name: identifier.identifier.text,
+            type: typeAnnotation.type.trimmedDescription
+        ))
+    }
+    return properties
 }
 
 // MARK: - Unimplemented Closure Generation
@@ -943,7 +1064,7 @@ private func generateUnimplementedClosure(for property: ClosureProperty, structN
 
 private func buildOperationSignature(for property: ClosureProperty) -> String {
     if property.parameters.isEmpty {
-        return "\(property.name)()"
+        return "\(property.methodName)()"
     }
 
     let labels = property.parameters.map { param in
@@ -951,26 +1072,33 @@ private func buildOperationSignature(for property: ClosureProperty) -> String {
     }
 
     let labelString = labels.map { "\($0):" }.joined()
-    return "\(property.name)(\(labelString))"
+    return "\(property.methodName)(\(labelString))"
 }
 
 // MARK: - Observe Accessor Generation
 
-private func generateObserveStruct(for properties: [ClosureProperty], structName: String) -> DeclSyntax {
+private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String) -> DeclSyntax {
+    // Non-closure property pass-through from witness
+    let nonClosurePassthrough = nonClosureProperties.map { "\($0.name): witness.\($0.name)" }
+
     // Generate callAsFunction closures (both - before and after with two closures)
     let bothClosures = properties.map { property -> String in
         generateBothObserveClosure(for: property, structName: structName)
-    }.joined(separator: ",\n                    ")
+    }
 
     // Generate before closures
     let beforeClosures = properties.map { property -> String in
         generateBeforeObserveClosure(for: property, structName: structName)
-    }.joined(separator: ",\n                    ")
+    }
 
     // Generate after closures
     let afterClosures = properties.map { property -> String in
         generateAfterObserveClosure(for: property, structName: structName)
-    }.joined(separator: ",\n                    ")
+    }
+
+    let bothInitArgs = (nonClosurePassthrough + bothClosures).joined(separator: ",\n                    ")
+    let beforeInitArgs = (nonClosurePassthrough + beforeClosures).joined(separator: ",\n                    ")
+    let afterInitArgs = (nonClosurePassthrough + afterClosures).joined(separator: ",\n                    ")
 
     return """
         public struct Observe: Sendable {
@@ -988,7 +1116,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], structName
                 after: @escaping @Sendable (Action.Outcome) -> Void
             ) -> \(raw: structName) {
                 \(raw: structName)(
-                    \(raw: bothClosures)
+                    \(raw: bothInitArgs)
                 )
             }
 
@@ -997,7 +1125,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], structName
                 _ observer: @escaping @Sendable (Action) -> Void
             ) -> \(raw: structName) {
                 \(raw: structName)(
-                    \(raw: beforeClosures)
+                    \(raw: beforeInitArgs)
                 )
             }
 
@@ -1006,7 +1134,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], structName
                 _ observer: @escaping @Sendable (Action.Outcome) -> Void
             ) -> \(raw: structName) {
                 \(raw: structName)(
-                    \(raw: afterClosures)
+                    \(raw: afterInitArgs)
                 )
             }
         }
@@ -1026,7 +1154,10 @@ private func generateBothObserveClosure(for property: ClosureProperty, structNam
     let parameterNames = property.parameters.enumerated().map { index, param in
         param.label ?? "p\(index)"
     }
-    let callArgs = parameterNames.joined(separator: ", ")
+    let callArgs = property.parameters.enumerated().map { index, param in
+        let name = param.label ?? "p\(index)"
+        return param.isInout ? "&\(name)" : name
+    }.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
     let awaitKeyword = property.isAsync ? "await " : ""
@@ -1046,10 +1177,10 @@ private func generateBothObserveClosure(for property: ClosureProperty, structNam
     }
 
     // Use typed Action.Result case for this property
-    let successResult = "Action.Outcome(action: action, result: .\(property.name)(.success(\(resultValue))))"
+    let successResult = "Action.Outcome(action: action, result: .\(property.methodName)(.success(\(resultValue))))"
     // For typed throws, cast the error to the specific type (safe since closure is typed)
     let errorCast = property.throwsType != nil ? "error as! \(property.throwsType!.trimmedDescription)" : "error"
-    let failureResult = "Action.Outcome(action: action, result: .\(property.name)(.failure(\(errorCast))))"
+    let failureResult = "Action.Outcome(action: action, result: .\(property.methodName)(.failure(\(errorCast))))"
 
     // Closure params with proper syntax: { [capture] (params) throws(E) -> T in body }
     let closureParamsWithParens = parameterNames.isEmpty ? "()" : "(\(parameterNames.joined(separator: ", ")))"
@@ -1090,7 +1221,10 @@ private func generateBeforeObserveClosure(for property: ClosureProperty, structN
     let parameterNames = property.parameters.enumerated().map { index, param in
         param.label ?? "p\(index)"
     }
-    let callArgs = parameterNames.joined(separator: ", ")
+    let callArgs = property.parameters.enumerated().map { index, param in
+        let name = param.label ?? "p\(index)"
+        return param.isInout ? "&\(name)" : name
+    }.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
     let awaitKeyword = property.isAsync ? "await " : ""
@@ -1126,7 +1260,10 @@ private func generateAfterObserveClosure(for property: ClosureProperty, structNa
     let parameterNames = property.parameters.enumerated().map { index, param in
         param.label ?? "p\(index)"
     }
-    let callArgs = parameterNames.joined(separator: ", ")
+    let callArgs = property.parameters.enumerated().map { index, param in
+        let name = param.label ?? "p\(index)"
+        return param.isInout ? "&\(name)" : name
+    }.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
     let awaitKeyword = property.isAsync ? "await " : ""
@@ -1146,10 +1283,10 @@ private func generateAfterObserveClosure(for property: ClosureProperty, structNa
     }
 
     // Use typed Action.Result case for this property
-    let successResult = "Action.Outcome(action: action, result: .\(property.name)(.success(\(resultValue))))"
+    let successResult = "Action.Outcome(action: action, result: .\(property.methodName)(.success(\(resultValue))))"
     // For typed throws, cast the error to the specific type (safe since closure is typed)
     let errorCast = property.throwsType != nil ? "error as! \(property.throwsType!.trimmedDescription)" : "error"
-    let failureResult = "Action.Outcome(action: action, result: .\(property.name)(.failure(\(errorCast))))"
+    let failureResult = "Action.Outcome(action: action, result: .\(property.methodName)(.failure(\(errorCast))))"
 
     // Closure params with proper syntax: { [capture] (params) throws(E) -> T in body }
     let closureParamsWithParens = parameterNames.isEmpty ? "()" : "(\(parameterNames.joined(separator: ", ")))"
@@ -1186,7 +1323,7 @@ private func generateAfterObserveClosure(for property: ClosureProperty, structNa
 /// Formats action construction: `.propertyName` or `.propertyName(label: value, ...)`
 private func formatActionConstruction(for property: ClosureProperty) -> String {
     if property.parameters.isEmpty {
-        return ".\(property.name)"
+        return ".\(property.methodName)"
     }
     let args = property.parameters.enumerated().map { index, param in
         let name = param.label ?? "p\(index)"
@@ -1196,7 +1333,7 @@ private func formatActionConstruction(for property: ClosureProperty) -> String {
             return name
         }
     }.joined(separator: ", ")
-    return ".\(property.name)(\(args))"
+    return ".\(property.methodName)(\(args))"
 }
 
 // MARK: - Diagnostics

@@ -74,6 +74,13 @@ private struct AccessorClosureProperty {
     let isThrowing: Bool
     let throwsType: TypeSyntax?
     let returnType: TypeSyntax
+
+    var methodName: String {
+        if name.hasPrefix("_") {
+            return String(name.dropFirst())
+        }
+        return name
+    }
 }
 
 private struct AccessorClosureParameter {
@@ -87,7 +94,8 @@ private func extractClosurePropertiesForAccessors(from structDecl: StructDeclSyn
 
     for member in structDecl.memberBlock.members {
         guard let varDecl = member.decl.as(VariableDeclSyntax.self),
-              varDecl.bindingSpecifier.tokenKind == .keyword(.var),
+              (varDecl.bindingSpecifier.tokenKind == .keyword(.var) ||
+               varDecl.bindingSpecifier.tokenKind == .keyword(.let)),
               let binding = varDecl.bindings.first,
               let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
               let typeAnnotation = binding.typeAnnotation,
@@ -122,8 +130,16 @@ private func extractFunctionTypeForAccessors(from type: TypeSyntax) -> FunctionT
 }
 
 private func extractParametersForAccessors(from functionType: FunctionTypeSyntax) -> [AccessorClosureParameter] {
-    functionType.parameters.map { param in
-        let label = param.secondName?.text
+    functionType.parameters.enumerated().map { index, param in
+        let label: String? = {
+            if let second = param.secondName?.text {
+                return second
+            }
+            if let first = param.firstName?.text, first != "_" {
+                return first
+            }
+            return nil
+        }()
         let isInout = param.type.is(AttributedTypeSyntax.self) &&
             param.type.as(AttributedTypeSyntax.self)?.specifiers.contains(where: {
                 $0.as(SimpleTypeSpecifierSyntax.self)?.specifier.tokenKind == .keyword(.inout)
@@ -171,7 +187,7 @@ private func generateStaticAccessor(
 
     return """
     @inlinable
-        \(accessModifier)static func \(property.name)(\(parameters))\(effectSpecifiers)\(returnClause) {
+        \(accessModifier)static func \(property.methodName)(\(parameters))\(effectSpecifiers)\(returnClause) {
             \(tryKeyword)\(awaitKeyword)Witness.Context.current[Self.self].\(property.name)(\(callArguments))
         }
     """

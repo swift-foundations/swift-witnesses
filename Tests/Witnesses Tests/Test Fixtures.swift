@@ -28,6 +28,22 @@ struct MockableAPI: Sendable {
     var deleteUser: @Sendable (_ id: Int) async throws(Witness.Unimplemented.Error) -> Void
 }
 
+// MARK: - Ownership Convention Fixtures
+
+/// A simple handle type for testing ownership parameter conventions.
+struct SomeHandle: Sendable {
+    let id: Int
+}
+
+/// Witness with borrowing/consuming/inout parameter conventions.
+@Witness
+struct OwnershipAPI: Sendable {
+    var borrow: @Sendable (_ handle: borrowing SomeHandle) throws(Witness.Unimplemented.Error) -> Int
+    var consume: @Sendable (_ handle: consuming SomeHandle) throws(Witness.Unimplemented.Error) -> Void
+    var mutate: @Sendable (_ buffer: inout [UInt8]) throws(Witness.Unimplemented.Error) -> Int
+    var mixed: @Sendable (_ handle: borrowing SomeHandle, _ count: Int, _ buffer: inout [UInt8]) throws(Witness.Unimplemented.Error) -> Void
+}
+
 // MARK: - ~Copyable Witness Fixtures
 
 /// A ~Copyable witness value representing a unique, non-shareable resource.
@@ -58,6 +74,31 @@ struct TokenProvider: Witness.Key, Sendable {
 }
 
 // MARK: - Copyable Witness Fixtures
+
+// MARK: - Driver Pattern Fixtures (let closures, _ prefix, non-closure properties)
+
+/// Witness with let closures, _ prefix, non-closure properties (IO driver pattern).
+@Witness
+struct DriverPatternAPI: Sendable {
+    let capabilities: Int
+    let _create: @Sendable () throws(Witness.Unimplemented.Error) -> String
+    let _operate: @Sendable (_ handle: borrowing SomeHandle, _ count: Int) throws(Witness.Unimplemented.Error) -> Void
+    let _close: @Sendable (_ handle: consuming SomeHandle) throws(Witness.Unimplemented.Error) -> Void
+}
+
+// MARK: - Existing Init Fixture
+
+/// Witness with existing init (macro should skip init generation).
+@Witness
+struct ExistingInitAPI: Sendable {
+    var fetch: @Sendable (_ id: Int) throws(Witness.Unimplemented.Error) -> String
+
+    init(fetch: @escaping @Sendable (_ id: Int) throws(Witness.Unimplemented.Error) -> String) {
+        self.fetch = fetch
+    }
+}
+
+// MARK: - Witness.Key Fixtures
 
 extension TestAPI: Witness.Key {
     static var liveValue: TestAPI {

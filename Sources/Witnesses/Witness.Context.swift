@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Witness_Primitives
+import Dependency_Primitives
 
 extension Witness {
     /// Task-local context for witness dependency injection.
@@ -175,11 +176,13 @@ extension Witness.Context {
         var context = _current
         context.mode = mode
         modify?(&context.values)
-        return try $_current.withValue(context) {
-            do throws(E) {
-                return Result<T, E>.success(try operation())
-            } catch {
-                return Result<T, E>.failure(error)
+        return try Dependency.Scope.with({ $0.isTestContext = (mode == .test) }) {
+            $_current.withValue(context) {
+                do throws(E) {
+                    return Result<T, E>.success(try operation())
+                } catch {
+                    return Result<T, E>.failure(error)
+                }
             }
         }.get()
     }
@@ -235,13 +238,16 @@ extension Witness.Context {
         var context = _current
         context.mode = mode
         modify?(&context.values)
-        return try await $_current.withValue(context) {
-            do throws(E) {
-                return Result<T, E>.success(try await operation())
-            } catch {
-                return Result<T, E>.failure(error)
+        let result: Result<T, E> = await Dependency.Scope.with({ $0.isTestContext = (mode == .test) }) {
+            await $_current.withValue(context) {
+                do throws(E) {
+                    return Result<T, E>.success(try await operation())
+                } catch {
+                    return Result<T, E>.failure(error)
+                }
             }
-        }.get()
+        }
+        return try result.get()
     }
 }
 
@@ -264,11 +270,13 @@ extension Witness.Context {
         var context = _current
         context.mode = .test
         modify?(&context.values)
-        return try $_current.withValue(context) {
-            do throws(E) {
-                return Result<T, E>.success(try operation())
-            } catch {
-                return Result<T, E>.failure(error)
+        return try Dependency.Scope.with({ $0.isTestContext = true }) {
+            $_current.withValue(context) {
+                do throws(E) {
+                    return Result<T, E>.success(try operation())
+                } catch {
+                    return Result<T, E>.failure(error)
+                }
             }
         }.get()
     }
@@ -289,11 +297,13 @@ extension Witness.Context {
         var context = _current
         context.mode = .preview
         modify?(&context.values)
-        return try $_current.withValue(context) {
-            do throws(E) {
-                return Result<T, E>.success(try operation())
-            } catch {
-                return Result<T, E>.failure(error)
+        return try Dependency.Scope.with({ $0.isTestContext = false }) {
+            $_current.withValue(context) {
+                do throws(E) {
+                    return Result<T, E>.success(try operation())
+                } catch {
+                    return Result<T, E>.failure(error)
+                }
             }
         }.get()
     }
@@ -318,13 +328,16 @@ extension Witness.Context {
         var context = _current
         context.mode = .test
         modify?(&context.values)
-        return try await $_current.withValue(context) {
-            do throws(E) {
-                return Result<T, E>.success(try await operation())
-            } catch {
-                return Result<T, E>.failure(error)
+        let result: Result<T, E> = await Dependency.Scope.with({ $0.isTestContext = true }) {
+            await $_current.withValue(context) {
+                do throws(E) {
+                    return Result<T, E>.success(try await operation())
+                } catch {
+                    return Result<T, E>.failure(error)
+                }
             }
-        }.get()
+        }
+        return try result.get()
     }
 
     /// Executes an async closure in preview mode.
@@ -343,12 +356,15 @@ extension Witness.Context {
         var context = _current
         context.mode = .preview
         modify?(&context.values)
-        return try await $_current.withValue(context) {
-            do throws(E) {
-                return Result<T, E>.success(try await operation())
-            } catch {
-                return Result<T, E>.failure(error)
+        let result: Result<T, E> = await Dependency.Scope.with({ $0.isTestContext = false }) {
+            await $_current.withValue(context) {
+                do throws(E) {
+                    return Result<T, E>.success(try await operation())
+                } catch {
+                    return Result<T, E>.failure(error)
+                }
             }
-        }.get()
+        }
+        return try result.get()
     }
 }

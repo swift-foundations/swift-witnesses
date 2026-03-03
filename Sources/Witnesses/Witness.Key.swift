@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Witness_Primitives
+public import Dependency_Primitives
 
 // MARK: - Hoisted Protocol (Swift limitation: protocols cannot nest in protocols)
 
@@ -67,7 +68,7 @@ extension Witness {
     ///
     /// If you customize `previewValue`, tests will also get that customization
     /// unless you explicitly override `testValue`.
-    public protocol Key<Value>: __WitnessKeyTest {
+    public protocol Key<Value>: Dependency.Key, __WitnessKeyTest {
         /// The default value for production contexts.
         static var liveValue: Value { get }
     }

@@ -115,6 +115,26 @@ struct ExistingInitAPI: Sendable {
     }
 }
 
+// MARK: - Generator Pattern Fixture
+
+@Witness(.generator)
+struct IntGenerator: Sendable {
+    var generate: @Sendable () throws(Witness.Unimplemented.Error) -> Int
+}
+
+// MARK: - Foreign Error Type Fixture
+
+enum CustomError: Error, Sendable { case failed }
+
+// MARK: - Nested Type Fixture
+
+enum APINamespace {
+    @Witness
+    struct Client: Sendable {
+        var fetch: @Sendable (_ id: Int) throws(Witness.Unimplemented.Error) -> String
+    }
+}
+
 // MARK: - Witness.Key Fixtures
 
 extension TestAPI: Witness.Key {

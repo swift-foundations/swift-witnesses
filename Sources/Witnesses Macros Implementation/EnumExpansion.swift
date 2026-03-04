@@ -269,71 +269,78 @@ private func generateEnumComputedProperty(for enumCase: EnumCase) -> DeclSyntax 
 }
 
 private func generateEnumPrismProperty(for enumCase: EnumCase, enumName: String) -> String {
-    if enumCase.parameters.isEmpty {
+    let prismCase = PrismCase(
+        caseName: escapeIdentifier(enumCase.name),
+        rootTypeName: enumName,
+        parameters: enumCase.parameters.map { (
+            $0.label.map { escapeIdentifier($0) },
+            $0.type
+        )}
+    )
+    return generatePrism(for: prismCase)
+}
+
+// MARK: - Shared Prism Generation
+
+/// Common representation for a prism case, used by both Action (struct) and enum prism generation.
+struct PrismCase {
+    let caseName: String
+    let rootTypeName: String
+    let parameters: [(label: String?, type: String)]
+}
+
+/// Generates a single prism property for a case.
+func generatePrism(for prismCase: PrismCase) -> String {
+    let name = prismCase.caseName
+    let root = prismCase.rootTypeName
+
+    if prismCase.parameters.isEmpty {
         return """
-        public var \(enumCase.name): Optic_Primitives.Optic.Prism<\(enumName), Void> {
-                Optic_Primitives.Optic.Prism(
-                    embed: { _ in .\(enumCase.name) },
-                    extract: { if case .\(enumCase.name) = $0 { return () } else { return nil } }
-                )
-            }
+        public var \(name): Optic_Primitives.Optic.Prism<\(root), Void> {
+                    Optic_Primitives.Optic.Prism(
+                        embed: { _ in .\(name) },
+                        extract: { if case .\(name) = $0 { return () } else { return nil } }
+                    )
+                }
         """
-    } else if enumCase.parameters.count == 1 {
-        let param = enumCase.parameters[0]
+    } else if prismCase.parameters.count == 1 {
+        let param = prismCase.parameters[0]
         let paramType = param.type
         let embedArg = param.label != nil ? "\(param.label!): $0" : "$0"
         let extractPattern = param.label != nil ? "\(param.label!): let v" : "let v"
 
         return """
-        public var \(enumCase.name): Optic_Primitives.Optic.Prism<\(enumName), \(paramType)> {
-                Optic_Primitives.Optic.Prism(
-                    embed: { .\(enumCase.name)(\(embedArg)) },
-                    extract: { if case .\(enumCase.name)(\(extractPattern)) = $0 { return v } else { return nil } }
-                )
-            }
+        public var \(name): Optic_Primitives.Optic.Prism<\(root), \(paramType)> {
+                    Optic_Primitives.Optic.Prism(
+                        embed: { .\(name)(\(embedArg)) },
+                        extract: { if case .\(name)(\(extractPattern)) = $0 { return v } else { return nil } }
+                    )
+                }
         """
     } else {
-        let tupleTypes = enumCase.parameters.map { param in
-            if let label = param.label {
-                let escaped = escapeIdentifier(label)
-                return "\(escaped): \(param.type)"
-            } else {
-                return param.type
-            }
+        let tupleTypes = prismCase.parameters.map { p in
+            p.label != nil ? "\(p.label!): \(p.type)" : p.type
         }.joined(separator: ", ")
 
-        let embedArgs = enumCase.parameters.enumerated().map { index, param in
-            if let label = param.label {
-                return "\(label): $0.\(index)"
-            } else {
-                return "$0.\(index)"
-            }
+        let embedArgs = prismCase.parameters.enumerated().map { i, p in
+            p.label != nil ? "\(p.label!): $0.\(i)" : "$0.\(i)"
         }.joined(separator: ", ")
 
-        let extractPatterns = enumCase.parameters.enumerated().map { index, param in
-            if let label = param.label {
-                return "\(label): let v\(index)"
-            } else {
-                return "let v\(index)"
-            }
+        let extractPatterns = prismCase.parameters.enumerated().map { i, p in
+            p.label != nil ? "\(p.label!): let v\(i)" : "let v\(i)"
         }.joined(separator: ", ")
 
-        let extractTuple = enumCase.parameters.enumerated().map { index, param in
-            if let label = param.label {
-                let escaped = escapeIdentifier(label)
-                return "\(escaped): v\(index)"
-            } else {
-                return "v\(index)"
-            }
+        let extractTuple = prismCase.parameters.enumerated().map { i, p in
+            p.label != nil ? "\(p.label!): v\(i)" : "v\(i)"
         }.joined(separator: ", ")
 
         return """
-        public var \(enumCase.name): Optic_Primitives.Optic.Prism<\(enumName), (\(tupleTypes))> {
-                Optic_Primitives.Optic.Prism(
-                    embed: { .\(enumCase.name)(\(embedArgs)) },
-                    extract: { if case .\(enumCase.name)(\(extractPatterns)) = $0 { return (\(extractTuple)) } else { return nil } }
-                )
-            }
+        public var \(name): Optic_Primitives.Optic.Prism<\(root), (\(tupleTypes))> {
+                    Optic_Primitives.Optic.Prism(
+                        embed: { .\(name)(\(embedArgs)) },
+                        extract: { if case .\(name)(\(extractPatterns)) = $0 { return (\(extractTuple)) } else { return nil } }
+                    )
+                }
         """
     }
 }

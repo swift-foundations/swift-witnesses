@@ -95,6 +95,32 @@ extension Witness.Derive.Test.Unit {
     }
 }
 
+// MARK: - Generator Tests
+
+extension Witness.Derive.Test.Unit {
+    @Test
+    func `Generator callAsFunction returns closure result`() throws {
+        let gen = IntGenerator(generate: { 42 })
+        let result = try gen()
+        #expect(result == 42)
+    }
+
+    @Test
+    func `Generator constant returns same value`() throws {
+        let gen = IntGenerator.constant(99)
+        #expect(try gen() == 99)
+        #expect(try gen() == 99)
+    }
+
+    @Test
+    func `Generator unimplemented throws`() {
+        let gen = IntGenerator.unimplemented()
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try gen()
+        }
+    }
+}
+
 // MARK: - Edge Case Tests
 
 extension Witness.Derive.Test.EdgeCase {

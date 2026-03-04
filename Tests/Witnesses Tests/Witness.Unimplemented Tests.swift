@@ -187,6 +187,111 @@ extension Witness.Unimplemented.Test.Unit {
     }
 }
 
+// MARK: - Observe Tests
+
+extension Witness.Unimplemented.Test.Unit {
+    @Test
+    func `Observe after receives outcome on success`() async throws {
+        let log = Synchronization.Mutex<[String]>([])
+        let base = TestAPI(
+            fetch: { id in "result-\(id)" },
+            update: { _, _ in }
+        )
+        let observed = base.observe.after { outcome in
+            log.withLock { $0.append("after:\(outcome.action.case)") }
+        }
+        let result = try await observed.fetch(id: 1)
+        #expect(result == "result-1")
+        let entries = log.withLock { $0 }
+        #expect(entries == ["after:fetch"])
+    }
+
+    @Test
+    func `Observe after receives outcome on failure`() async throws {
+        let log = Synchronization.Mutex<[String]>([])
+        let base = TestAPI.unimplemented()
+        let observed = base.observe.after { outcome in
+            log.withLock { $0.append("after:\(outcome.action.case)") }
+        }
+        await #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try await observed.fetch(id: 1)
+        }
+        let entries = log.withLock { $0 }
+        #expect(entries == ["after:fetch"])
+    }
+
+    @Test
+    func `Observe both receives before and after`() async throws {
+        let log = Synchronization.Mutex<[String]>([])
+        let base = TestAPI(
+            fetch: { id in "result-\(id)" },
+            update: { _, _ in }
+        )
+        let observed = base.observe(
+            { action in log.withLock { $0.append("before:\(action.case)") } },
+            after: { outcome in log.withLock { $0.append("after:\(outcome.action.case)") } }
+        )
+        let result = try await observed.fetch(id: 1)
+        #expect(result == "result-1")
+        let entries = log.withLock { $0 }
+        #expect(entries == ["before:fetch", "after:fetch"])
+    }
+}
+
+// MARK: - ExistingInitAPI Tests
+
+extension Witness.Unimplemented.Test.Unit {
+    @Test
+    func `ExistingInitAPI compiles and works with custom init`() throws {
+        let api = ExistingInitAPI(fetch: { id in "custom-\(id)" })
+        let result = try api.fetch(id: 1)
+        #expect(result == "custom-1")
+    }
+
+    @Test
+    func `ExistingInitAPI unimplemented works`() {
+        let api = ExistingInitAPI.unimplemented()
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try api.fetch(id: 1)
+        }
+    }
+}
+
+// MARK: - Typed Throws Preservation Tests
+
+extension Witness.Unimplemented.Test.Unit {
+    @Test
+    func `Generated convenience method preserves typed throws`() async {
+        let api = TestAPI.unimplemented()
+
+        // If typed throws is preserved, this do/catch compiles with typed error
+        do {
+            _ = try await api.fetch(id: 1)
+        } catch {
+            // error should be Witness.Unimplemented.Error, not any Error
+            let _: Witness.Unimplemented.Error = error
+            #expect(error.witness == "TestAPI")
+        }
+    }
+}
+
+// MARK: - Nested Type Tests
+
+extension Witness.Unimplemented.Test.Unit {
+    @Test
+    func `Nested witness struct compiles and works`() throws {
+        let client = APINamespace.Client.unimplemented()
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try client.fetch(id: 1)
+        }
+
+        let observed = APINamespace.Client(fetch: { id in "nested-\(id)" })
+            .observe.before { _ in }
+        let result = try observed.fetch(id: 1)
+        #expect(result == "nested-1")
+    }
+}
+
 // MARK: - Integration Tests
 
 extension Witness.Unimplemented.Test.Integration {

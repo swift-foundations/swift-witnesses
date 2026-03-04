@@ -86,6 +86,23 @@ struct DriverPatternAPI: Sendable {
     let _close: @Sendable (_ handle: consuming SomeHandle) throws(Witness.Unimplemented.Error) -> Void
 }
 
+// MARK: - ~Copyable Driver Pattern Fixture
+
+/// A ~Copyable handle mimicking IO.Event.Driver.Handle.
+struct NoncopyableHandle: ~Copyable, Sendable {
+    let fd: Int32
+}
+
+/// Witness with ~Copyable ownership patterns matching IO.Event.Driver's shape.
+/// Tests the omission pattern: borrowing/consuming/inout params are omitted from Action.
+@Witness
+struct NoncopyableDriverAPI: Sendable {
+    let _create: @Sendable () throws(Witness.Unimplemented.Error) -> NoncopyableHandle
+    let _register: @Sendable (borrowing NoncopyableHandle, Int32) throws(Witness.Unimplemented.Error) -> Int
+    let _poll: @Sendable (borrowing NoncopyableHandle, inout [Int32]) throws(Witness.Unimplemented.Error) -> Int
+    let _close: @Sendable (consuming NoncopyableHandle) -> Void
+}
+
 // MARK: - Existing Init Fixture
 
 /// Witness with existing init (macro should skip init generation).

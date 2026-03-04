@@ -140,7 +140,8 @@ extension WitnessMacro: MemberMacro {
 
         // Generate Observe accessor struct and property
         let nonClosureProperties = extractNonClosureProperties(from: structDecl)
-        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structDecl.name.text))
+        let noncopyableTypeNames = collectNoncopyableTypeNames(from: closureProperties)
+        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structDecl.name.text, noncopyableTypeNames: noncopyableTypeNames))
         members.append(generateObserveProperty())
 
         // Generate callAsFunction if .generator is specified and there's exactly one closure
@@ -770,10 +771,27 @@ private func generateMethodSignature(name: String, functionType: FunctionTypeSyn
     return "\(name)(\(labelString))"
 }
 
+// MARK: - ~Copyable Type Detection
+
+/// Collects type names that are known ~Copyable based on ownership annotations.
+/// Any type appearing with `borrowing`/`consuming` is ~Copyable and cannot
+/// appear as an enum associated value (in Action or Action.Result).
+private func collectNoncopyableTypeNames(from properties: [ClosureProperty]) -> Set<String> {
+    var names = Set<String>()
+    for property in properties {
+        for param in property.parameters where param.ownership != nil {
+            names.insert(param.baseType.trimmedDescription)
+        }
+    }
+    return names
+}
+
 // MARK: - Action Enum Generation
 
 private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax {
     let caseCount = properties.count
+
+    let noncopyableTypeNames = collectNoncopyableTypeNames(from: properties)
 
     // Generate Action cases (inputs only, owned params omitted)
     let actionCases = properties.map { property in
@@ -822,9 +840,10 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
     // Generate Prisms struct properties
     let prismProperties = generatePrismProperties(for: properties)
 
-    // Generate Action.Result cases with typed Result for each action
+    // Generate Action.Result cases with typed Result for each action.
+    // Return types that are known ~Copyable are replaced with Void.
     let resultCases = properties.map { property in
-        generateTypedResultCase(for: property)
+        generateTypedResultCase(for: property, noncopyableTypeNames: noncopyableTypeNames)
     }.joined(separator: "\n                ")
 
     // Structure:
@@ -919,8 +938,10 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
 
 /// Generates a typed Result case for a closure property.
 /// e.g., `case fetchUser(Swift.Result<String, Witness.Unimplemented.Error>)`
-private func generateTypedResultCase(for property: ClosureProperty) -> String {
-    let returnType = property.returnType.trimmedDescription
+private func generateTypedResultCase(for property: ClosureProperty, noncopyableTypeNames: Set<String>) -> String {
+    let rawReturnType = property.returnType.trimmedDescription
+    // If the return type is a known ~Copyable type, use Void in the Result enum
+    let returnType = noncopyableTypeNames.contains(rawReturnType) ? "Void" : rawReturnType
     let errorType = property.throwsType?.trimmedDescription ?? "Never"
     return "case \(property.methodName)(Swift.Result<\(returnType), \(errorType)>)"
 }
@@ -1119,13 +1140,13 @@ private func buildOperationSignature(for property: ClosureProperty) -> String {
 
 // MARK: - Observe Accessor Generation
 
-private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String) -> DeclSyntax {
+private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String, noncopyableTypeNames: Set<String> = []) -> DeclSyntax {
     // Non-closure property pass-through from witness
     let nonClosurePassthrough = nonClosureProperties.map { "\($0.name): witness.\($0.name)" }
 
     // Generate callAsFunction closures (both - before and after with two closures)
     let bothClosures = properties.map { property -> String in
-        generateBothObserveClosure(for: property, structName: structName)
+        generateBothObserveClosure(for: property, structName: structName, noncopyableTypeNames: noncopyableTypeNames)
     }
 
     // Generate before closures
@@ -1135,7 +1156,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
 
     // Generate after closures
     let afterClosures = properties.map { property -> String in
-        generateAfterObserveClosure(for: property, structName: structName)
+        generateAfterObserveClosure(for: property, structName: structName, noncopyableTypeNames: noncopyableTypeNames)
     }
 
     let bothInitArgs = (nonClosurePassthrough + bothClosures).joined(separator: ",\n                    ")
@@ -1191,7 +1212,7 @@ private func generateObserveProperty() -> DeclSyntax {
         """
 }
 
-private func generateBothObserveClosure(for property: ClosureProperty, structName: String) -> String {
+private func generateBothObserveClosure(for property: ClosureProperty, structName: String, noncopyableTypeNames: Set<String> = []) -> String {
     let captureList = "[witness]"
     let parameterNames = property.parameters.enumerated().map { index, param in
         let name = param.label ?? "p\(index)"
@@ -1217,7 +1238,9 @@ private func generateBothObserveClosure(for property: ClosureProperty, structNam
 
     let returnType = property.returnType.trimmedDescription
     let hasReturn = returnType != "Void" && returnType != "()"
-    let resultValue = hasReturn ? "result" : "()"
+    let isNoncopyableReturn = noncopyableTypeNames.contains(returnType)
+    // For ~Copyable returns, the Result enum uses Void, so outcome value is ()
+    let resultValue = (hasReturn && !isNoncopyableReturn) ? "result" : "()"
 
     // Include typed throws annotation if present
     let throwsAnnotation: String
@@ -1319,7 +1342,7 @@ private func generateBeforeObserveClosure(for property: ClosureProperty, structN
     """
 }
 
-private func generateAfterObserveClosure(for property: ClosureProperty, structName: String) -> String {
+private func generateAfterObserveClosure(for property: ClosureProperty, structName: String, noncopyableTypeNames: Set<String> = []) -> String {
     let captureList = "[witness]"
     let parameterNames = property.parameters.enumerated().map { index, param in
         let name = param.label ?? "p\(index)"
@@ -1345,7 +1368,8 @@ private func generateAfterObserveClosure(for property: ClosureProperty, structNa
 
     let returnType = property.returnType.trimmedDescription
     let hasReturn = returnType != "Void" && returnType != "()"
-    let resultValue = hasReturn ? "result" : "()"
+    let isNoncopyableReturn = noncopyableTypeNames.contains(returnType)
+    let resultValue = (hasReturn && !isNoncopyableReturn) ? "result" : "()"
 
     // Include typed throws annotation if present
     let throwsAnnotation: String

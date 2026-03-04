@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
+import Synchronization
 @testable import Witnesses
 
 extension Witness.Unimplemented {
@@ -107,6 +108,82 @@ extension Witness.Unimplemented.Test.EdgeCase {
         await #expect(throws: Witness.Unimplemented.Error.self) {
             try await api.update(id: 1, value: "test")
         }
+    }
+}
+
+extension Witness.Unimplemented.Test.Unit {
+    @Test
+    func `Noncopyable driver unimplemented throws for throwing closures`() throws {
+        let driver = NoncopyableDriverAPI.unimplemented()
+
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try driver._create()
+        }
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try driver._register(NoncopyableHandle(fd: 1), 42)
+        }
+    }
+
+    @Test
+    func `Noncopyable driver Action omits owned params`() {
+        // register takes (borrowing NoncopyableHandle, Int32) → only Int32 in Action
+        let action = NoncopyableDriverAPI.Action.register(42)
+        if case .register(let descriptor) = action {
+            #expect(descriptor == 42)
+        } else {
+            Issue.record("Expected .register")
+        }
+
+        // close takes (consuming NoncopyableHandle) → no associated values
+        let closeAction = NoncopyableDriverAPI.Action.close
+        #expect(closeAction.case == .close)
+
+        // poll takes (borrowing NoncopyableHandle, inout [Int32]) → no associated values
+        let pollAction = NoncopyableDriverAPI.Action.poll
+        #expect(pollAction.case == .poll)
+
+        // create has no params → no associated values
+        let createAction = NoncopyableDriverAPI.Action.create
+        #expect(createAction.case == .create)
+    }
+
+    @Test
+    func `Noncopyable driver Observe forwards ownership correctly`() throws {
+        let log = Synchronization.Mutex<[String]>([])
+
+        let base = NoncopyableDriverAPI(
+            _create: { NoncopyableHandle(fd: 100) },
+            _register: { handle, descriptor in
+                return Int(descriptor)
+            },
+            _poll: { handle, buffer in
+                buffer.append(handle.fd)
+                return 1
+            },
+            _close: { handle in
+                log.withLock { $0.append("closed fd=\(handle.fd)") }
+            }
+        )
+
+        let observed = base.observe.before { action in
+            log.withLock { $0.append("before:\(action.case)") }
+        }
+
+        let h = try observed._create()
+        #expect(h.fd == 100)
+        let regResult = try observed._register(h, 42)
+        #expect(regResult == 42)
+        var buffer: [Int32] = []
+        _ = try observed._poll(h, &buffer)
+        #expect(buffer == [100])
+        observed._close(consume h)
+
+        let entries = log.withLock { $0 }
+        #expect(entries.contains("before:create"))
+        #expect(entries.contains("before:register"))
+        #expect(entries.contains("before:poll"))
+        #expect(entries.contains("before:close"))
+        #expect(entries.contains("closed fd=100"))
     }
 }
 

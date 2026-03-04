@@ -1187,8 +1187,7 @@ private func generateObserveClosure(
     let isNoncopyableReturn = noncopyableTypeNames.contains(returnType)
     let resultValue = (hasReturn && !isNoncopyableReturn) ? "result" : "()"
 
-    // For typed throws, cast error to the specific type (safe since closure is typed)
-    let errorExpr = property.throwsType != nil ? "error as! \(property.throwsType!.trimmedDescription)" : "error"
+    let errorExpr = "error"
     let successOutcome = "Action.Outcome(action: action, result: .\(property.methodName)(.success(\(resultValue))))"
     let failureOutcome = "Action.Outcome(action: action, result: .\(property.methodName)(.failure(\(errorExpr))))"
 

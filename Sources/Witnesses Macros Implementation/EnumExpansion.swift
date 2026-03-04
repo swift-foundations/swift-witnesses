@@ -349,8 +349,7 @@ func generatePrism(for prismCase: PrismCase) -> String {
 
 /// Escapes an identifier with backticks if it's a Swift keyword.
 func escapeIdentifier(_ identifier: String) -> String {
-    var identifier = identifier
-    let isKeyword = identifier.withUTF8 { buffer in
+    let isKeyword = Array(identifier.utf8).withUnsafeBufferPointer { buffer in
         let text = SyntaxText(baseAddress: buffer.baseAddress, count: buffer.count)
         return Keyword(text) != nil
     }

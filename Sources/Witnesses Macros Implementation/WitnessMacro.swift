@@ -933,7 +933,7 @@ private func generateActionCaseProperty(for properties: [ClosureProperty]) -> St
     """
 }
 
-/// Generates the Result enum with Witness.Result<Success, Failure> per action.
+/// Generates the Result enum with Standard_Library_Extensions.Result<Success, Failure> per action.
 private func generateResultEnum(for properties: [ClosureProperty]) -> String {
     let cases = properties.map { property in
         generateTypedResultCase(for: property)
@@ -946,11 +946,11 @@ private func generateResultEnum(for properties: [ClosureProperty]) -> String {
 }
 
 /// Generates a typed Result case for a closure property.
-/// e.g., `case fetchUser(Witness.Result<String, Witness.Unimplemented.Error>)`
+/// e.g., `case fetchUser(Standard_Library_Extensions.Result<String, Witness.Unimplemented.Error>)`
 private func generateTypedResultCase(for property: ClosureProperty) -> String {
     let returnType = property.returnType.trimmedDescription
     let errorType = property.throwsType?.trimmedDescription ?? "Never"
-    return "case \(property.methodName)(Witness.Result<\(returnType), \(errorType)>)"
+    return "case \(property.methodName)(Standard_Library_Extensions.Result<\(returnType), \(errorType)>)"
 }
 
 /// Generates prism properties for each closure property.
@@ -1170,7 +1170,7 @@ private func generateObserveClosure(
     let errorType = property.throwsType?.trimmedDescription ?? "Never"
 
     // Fully-qualified Witness.Result type to avoid inference issues with ~Copyable enums
-    let witnessResultType = "Witness.Result<\(returnType), \(errorType)>"
+    let witnessResultType = "Standard_Library_Extensions.Result<\(returnType), \(errorType)>"
 
     // Observer callback names differ by variant
     let beforeCall: String
@@ -1190,7 +1190,7 @@ private func generateObserveClosure(
     // Non-throwing closures don't include throws annotation
     let throwsAnno = property.isThrowing ? property.throwsAnnotation : ""
 
-    /// Builds outcome construction: `Action.Outcome(action: action, result: Action.Result.methodName(Witness.Result<T,E>.success(value)))`
+    /// Builds outcome construction: `Action.Outcome(action: action, result: Action.Result.methodName(Standard_Library_Extensions.Result<T,E>.success(value)))`
     func outcomeExpr(witnessResult: String) -> String {
         "Action.Outcome(action: action, result: Action.Result.\(property.methodName)(\(witnessResult)))"
     }

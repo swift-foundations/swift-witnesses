@@ -153,7 +153,7 @@ extension Witness.Unimplemented.Test.Unit {
         // instead of being replaced with Void. Verify by constructing outcomes.
         let handle = NoncopyableHandle(fd: 42)
         let result = NoncopyableDriverAPI.Action.Result.create(
-            Witness.Result<NoncopyableHandle, Witness.Unimplemented.Error>.success(handle)
+            Standard_Library_Extensions.Result<NoncopyableHandle, Witness.Unimplemented.Error>.success(handle)
         )
         switch consume result {
         case .create(.success(let h)):

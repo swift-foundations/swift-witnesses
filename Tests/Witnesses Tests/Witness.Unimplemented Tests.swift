@@ -148,6 +148,59 @@ extension Witness.Unimplemented.Test.Unit {
     }
 
     @Test
+    func `Noncopyable driver Action.Result carries actual return types`() throws {
+        // With the heuristic eliminated, NoncopyableHandle appears in Action.Result
+        // instead of being replaced with Void. Verify by constructing outcomes.
+        let handle = NoncopyableHandle(fd: 42)
+        let result = NoncopyableDriverAPI.Action.Result.create(
+            Witness.Result<NoncopyableHandle, Witness.Unimplemented.Error>.success(handle)
+        )
+        switch consume result {
+        case .create(.success(let h)):
+            #expect(h.fd == 42)
+        default:
+            Issue.record("Expected .create(.success)")
+        }
+    }
+
+    @Test
+    func `Noncopyable driver Observe after works with borrowing`() throws {
+        let log = Synchronization.Mutex<[String]>([])
+
+        let base = NoncopyableDriverAPI(
+            _create: { NoncopyableHandle(fd: 55) },
+            _register: { handle, descriptor in Int(descriptor) },
+            _poll: { handle, buffer in
+                buffer.append(handle.fd)
+                return 1
+            },
+            _close: { handle in
+                log.withLock { $0.append("closed fd=\(handle.fd)") }
+            }
+        )
+
+        // This was previously impossible: observe.after with ~Copyable return types
+        let observed = base.observe.after { outcome in
+            log.withLock { $0.append("after:\(outcome.action.case)") }
+        }
+
+        let h = try observed._create()
+        #expect(h.fd == 55)
+        let regResult = try observed._register(h, 42)
+        #expect(regResult == 42)
+        var buffer: [Int32] = []
+        _ = try observed._poll(h, &buffer)
+        observed._close(consume h)
+
+        let entries = log.withLock { $0 }
+        #expect(entries.contains("after:create"))
+        #expect(entries.contains("after:register"))
+        #expect(entries.contains("after:poll"))
+        #expect(entries.contains("after:close"))
+        #expect(entries.contains("closed fd=55"))
+    }
+
+    @Test
     func `Noncopyable driver Observe forwards ownership correctly`() throws {
         let log = Synchronization.Mutex<[String]>([])
 

@@ -119,8 +119,6 @@ extension WitnessMacro: MemberMacro {
         let isPublic = structDecl.modifiers.contains { $0.name.tokenKind == .keyword(.public) }
         let structName = structDecl.name.text
         let nonClosureProperties = extractNonClosureProperties(from: structDecl)
-        let noncopyableTypeNames = collectNoncopyableTypeNames(from: closureProperties)
-
         // Generate public initializer if needed (skip if struct already has one)
         let hasExistingInit = structDecl.memberBlock.members.contains { member in
             member.decl.is(InitializerDeclSyntax.self)
@@ -141,7 +139,7 @@ extension WitnessMacro: MemberMacro {
         }
 
         // Generate Action enum
-        members.append(generateActionEnum(for: closureProperties, noncopyableTypeNames: noncopyableTypeNames))
+        members.append(generateActionEnum(for: closureProperties))
 
         // Typealias for use in nested types (Observe) where bare struct name may not resolve
         if isPublic {
@@ -151,7 +149,7 @@ extension WitnessMacro: MemberMacro {
         }
 
         // Generate Observe accessor struct and property
-        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic, noncopyableTypeNames: noncopyableTypeNames))
+        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic))
         members.append(generateObserveProperty())
 
         // Generate unimplemented() as a member (not extension) for correct name resolution
@@ -798,28 +796,13 @@ private func generateMethodSignature(name: String, functionType: FunctionTypeSyn
     return "\(name)(\(labelString))"
 }
 
-// MARK: - ~Copyable Type Detection
-
-/// Collects type names that are known ~Copyable based on ownership annotations.
-/// Any type appearing with `borrowing`/`consuming` is ~Copyable and cannot
-/// appear as an enum associated value (in Action or Action.Result).
-private func collectNoncopyableTypeNames(from properties: [ClosureProperty]) -> Set<String> {
-    var names = Set<String>()
-    for property in properties {
-        for param in property.parameters where param.ownership != nil {
-            names.insert(param.baseType.trimmedDescription)
-        }
-    }
-    return names
-}
-
 // MARK: - Action Enum Generation
 
-private func generateActionEnum(for properties: [ClosureProperty], noncopyableTypeNames: Set<String>) -> DeclSyntax {
+private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax {
     let actionCases = generateActionCases(for: properties)
     let caseEnum = generateCaseEnum(for: properties)
     let caseProperty = generateActionCaseProperty(for: properties)
-    let resultEnum = generateResultEnum(for: properties, noncopyableTypeNames: noncopyableTypeNames)
+    let resultEnum = generateResultEnum(for: properties)
     let prismProperties = generatePrismProperties(for: properties)
 
     return """
@@ -836,15 +819,18 @@ private func generateActionEnum(for properties: [ClosureProperty], noncopyableTy
             \(raw: resultEnum)
 
             /// An action paired with its typed result.
-            public struct Outcome: Sendable {
+            public struct Outcome: ~Copyable, Sendable {
                 public let action: Action
                 public let result: Result
 
                 @inlinable
-                public init(action: Action, result: Result) {
+                public init(action: Action, result: consuming Result) {
                     self.action = action
                     self.result = result
                 }
+
+                @usableFromInline
+                consuming func __consumeResult() -> Result { result }
             }
 
             /// Prisms for each action case, enabling type-safe case matching and extraction.
@@ -947,26 +933,24 @@ private func generateActionCaseProperty(for properties: [ClosureProperty]) -> St
     """
 }
 
-/// Generates the Result enum with typed Result<Success, Failure> per action.
-private func generateResultEnum(for properties: [ClosureProperty], noncopyableTypeNames: Set<String>) -> String {
+/// Generates the Result enum with Witness.Result<Success, Failure> per action.
+private func generateResultEnum(for properties: [ClosureProperty]) -> String {
     let cases = properties.map { property in
-        generateTypedResultCase(for: property, noncopyableTypeNames: noncopyableTypeNames)
+        generateTypedResultCase(for: property)
     }.joined(separator: "\n                ")
     return """
-    public enum Result: Sendable {
+    public enum Result: ~Copyable, Sendable {
                 \(cases)
             }
     """
 }
 
 /// Generates a typed Result case for a closure property.
-/// e.g., `case fetchUser(Swift.Result<String, Witness.Unimplemented.Error>)`
-private func generateTypedResultCase(for property: ClosureProperty, noncopyableTypeNames: Set<String>) -> String {
-    let rawReturnType = property.returnType.trimmedDescription
-    // If the return type is a known ~Copyable type, use Void in the Result enum
-    let returnType = noncopyableTypeNames.contains(rawReturnType) ? "Void" : rawReturnType
+/// e.g., `case fetchUser(Witness.Result<String, Witness.Unimplemented.Error>)`
+private func generateTypedResultCase(for property: ClosureProperty) -> String {
+    let returnType = property.returnType.trimmedDescription
     let errorType = property.throwsType?.trimmedDescription ?? "Never"
-    return "case \(property.methodName)(Swift.Result<\(returnType), \(errorType)>)"
+    return "case \(property.methodName)(Witness.Result<\(returnType), \(errorType)>)"
 }
 
 /// Generates prism properties for each closure property.
@@ -1097,19 +1081,19 @@ private func buildOperationSignature(for property: ClosureProperty) -> String {
 
 // MARK: - Observe Accessor Generation
 
-private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String, isPublic: Bool, noncopyableTypeNames: Set<String>) -> DeclSyntax {
+private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String, isPublic: Bool) -> DeclSyntax {
     // Non-closure property pass-through from witness
     let nonClosurePassthrough = nonClosureProperties.map { "\($0.name): witness.\($0.name)" }
 
     // Generate observe closures for each variant
     let bothClosures = properties.map {
-        generateObserveClosure(for: $0, variant: .both, isPublic: isPublic, noncopyableTypeNames: noncopyableTypeNames)
+        generateObserveClosure(for: $0, variant: .both, isPublic: isPublic)
     }
     let beforeClosures = properties.map {
-        generateObserveClosure(for: $0, variant: .before, isPublic: isPublic, noncopyableTypeNames: noncopyableTypeNames)
+        generateObserveClosure(for: $0, variant: .before, isPublic: isPublic)
     }
     let afterClosures = properties.map {
-        generateObserveClosure(for: $0, variant: .after, isPublic: isPublic, noncopyableTypeNames: noncopyableTypeNames)
+        generateObserveClosure(for: $0, variant: .after, isPublic: isPublic)
     }
 
     let bothInitArgs = (nonClosurePassthrough + bothClosures).joined(separator: ",\n                    ")
@@ -1129,7 +1113,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
             @inlinable
             public func callAsFunction(
                 _ before: @escaping @Sendable (Action) -> Void,
-                after: @escaping @Sendable (Action.Outcome) -> Void
+                after: @escaping @Sendable (borrowing Action.Outcome) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: bothInitArgs)
@@ -1147,7 +1131,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
 
             @inlinable
             public func after(
-                _ observer: @escaping @Sendable (Action.Outcome) -> Void
+                _ observer: @escaping @Sendable (borrowing Action.Outcome) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: afterInitArgs)
@@ -1174,8 +1158,7 @@ private enum ObserveVariant {
 private func generateObserveClosure(
     for property: ClosureProperty,
     variant: ObserveVariant,
-    isPublic: Bool,
-    noncopyableTypeNames: Set<String>
+    isPublic: Bool
 ) -> String {
     let initLabel = property.initLabel(isPublic: isPublic)
     let closureParams = property.closureParameterList(named: true)
@@ -1184,30 +1167,33 @@ private func generateObserveClosure(
 
     let returnType = property.returnType.trimmedDescription
     let hasReturn = !property.returnsVoid
-    let isNoncopyableReturn = noncopyableTypeNames.contains(returnType)
-    let resultValue = (hasReturn && !isNoncopyableReturn) ? "result" : "()"
+    let errorType = property.throwsType?.trimmedDescription ?? "Never"
 
-    let errorExpr = "error"
-    let successOutcome = "Action.Outcome(action: action, result: .\(property.methodName)(.success(\(resultValue))))"
-    let failureOutcome = "Action.Outcome(action: action, result: .\(property.methodName)(.failure(\(errorExpr))))"
+    // Fully-qualified Witness.Result type to avoid inference issues with ~Copyable enums
+    let witnessResultType = "Witness.Result<\(returnType), \(errorType)>"
 
     // Observer callback names differ by variant
     let beforeCall: String
-    let afterCall: (success: String, failure: String)
+    let afterCall: String
     switch variant {
     case .before:
         beforeCall = "observer"
-        afterCall = ("", "")  // unused
+        afterCall = ""
     case .after:
-        beforeCall = ""  // unused
-        afterCall = ("observer", "observer")
+        beforeCall = ""
+        afterCall = "observer"
     case .both:
         beforeCall = "before"
-        afterCall = ("after", "after")
+        afterCall = "after"
     }
 
     // Non-throwing closures don't include throws annotation
     let throwsAnno = property.isThrowing ? property.throwsAnnotation : ""
+
+    /// Builds outcome construction: `Action.Outcome(action: action, result: Action.Result.methodName(Witness.Result<T,E>.success(value)))`
+    func outcomeExpr(witnessResult: String) -> String {
+        "Action.Outcome(action: action, result: Action.Result.\(property.methodName)(\(witnessResult)))"
+    }
 
     let body: String
     switch variant {
@@ -1222,15 +1208,33 @@ private func generateObserveClosure(
         let beforeLine = variant == .both
             ? "\(beforeCall)(action)\n                        "
             : ""
+        let successBody: String
+        if hasReturn {
+            successBody = """
+            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(result)"))
+                                \(afterCall)(__outcome)
+                                let __result = __outcome.__consumeResult()
+                                switch consume __result {
+                                case .\(property.methodName)(.success(let __value)): return __value
+                                default: fatalError("unreachable")
+                                }
+            """
+        } else {
+            successBody = """
+            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(())"))
+                                \(afterCall)(__outcome)
+            """
+        }
+        let doThrowsType = property.throwsType?.trimmedDescription ?? "any Error"
         body = """
                         let action: Action = \(actionConstruction)
-                        \(beforeLine)do {
+                        \(beforeLine)do throws(\(doThrowsType)) {
                             \(hasReturn ? "let result = " : "")try \(property.awaitPrefix)witness.\(property.name)(\(callArgs))
-                            \(afterCall.success)(\(successOutcome))
-                            \(hasReturn ? "return result" : "")
+                            \(successBody)
                         } catch {
-                            \(afterCall.failure)(\(failureOutcome))
-                            throw \(errorExpr)
+                            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).failure(error)"))
+                            \(afterCall)(__outcome)
+                            throw error
                         }
         """
 
@@ -1238,11 +1242,27 @@ private func generateObserveClosure(
         let beforeLine = variant == .both
             ? "\(beforeCall)(action)\n                        "
             : ""
+        let resultBody: String
+        if hasReturn {
+            resultBody = """
+            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(result)"))
+                        \(afterCall)(__outcome)
+                        let __result = __outcome.__consumeResult()
+                        switch consume __result {
+                        case .\(property.methodName)(.success(let __value)): return __value
+                        default: fatalError("unreachable")
+                        }
+            """
+        } else {
+            resultBody = """
+            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(())"))
+                        \(afterCall)(__outcome)
+            """
+        }
         body = """
                         let action: Action = \(actionConstruction)
                         \(beforeLine)\(hasReturn ? "let result = " : "")\(property.awaitPrefix)witness.\(property.name)(\(callArgs))
-                        \(afterCall.success)(\(successOutcome))
-                        \(hasReturn ? "return result" : "")
+                        \(resultBody)
         """
     }
 

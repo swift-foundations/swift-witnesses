@@ -632,13 +632,31 @@ struct ClosureParameter {
         isInout || ownership != nil
     }
 
-    /// The base type without ownership specifiers (`inout`/`borrowing`/`consuming`).
+    /// The base type without ownership specifiers, `@escaping`, or trivia.
+    ///
+    /// Strips `inout`/`borrowing`/`consuming` (ownership), `@escaping`
+    /// (only valid in function parameter position, not in enum associated
+    /// values, generic arguments, or storage), and trivia (comments that
+    /// would corrupt generated code).
     var baseType: TypeSyntax {
+        var result = type
         if hasOwnershipAnnotation,
-           let attributed = type.as(AttributedTypeSyntax.self) {
-            return attributed.baseType
+           let attributed = result.as(AttributedTypeSyntax.self) {
+            result = attributed.baseType
         }
-        return type
+        if let attributed = result.as(AttributedTypeSyntax.self) {
+            let filtered = attributed.attributes.filter { attr in
+                guard case .attribute(let a) = attr else { return true }
+                return a.attributeName.trimmedDescription != "escaping"
+            }
+            if filtered.isEmpty && attributed.specifiers.isEmpty {
+                return attributed.baseType.trimmed
+            }
+            var cleaned = attributed
+            cleaned.attributes = AttributeListSyntax(filtered)
+            return TypeSyntax(cleaned).trimmed
+        }
+        return result.trimmed
     }
 }
 
@@ -879,7 +897,7 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
             \(raw: resultEnum)
 
             /// An action paired with its typed result.
-            public struct Outcome: ~Copyable, Sendable {
+            public struct Outcome: ~Copyable {
                 public let action: Action
                 public let result: Result
 
@@ -999,7 +1017,7 @@ private func generateResultEnum(for properties: [ClosureProperty]) -> String {
         generateTypedResultCase(for: property)
     }.joined(separator: "\n                ")
     return """
-    public enum Result: ~Copyable, Sendable {
+    public enum Result: ~Copyable {
                 \(cases)
             }
     """

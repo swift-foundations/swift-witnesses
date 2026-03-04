@@ -11,7 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Witness_Primitives
-import Dependency_Primitives
+public import Dependency_Primitives
 
 extension Witness {
     /// Task-local context for witness dependency injection.
@@ -49,10 +49,6 @@ extension Witness {
     /// let fs = Witness.Context.current[FileSystem.self]
     /// ```
     public struct Context: Sendable {
-        /// Task-local storage for the current context.
-        @TaskLocal
-        private static var _current: Context = Context(values: Values(), mode: .live)
-
         /// The witness values in this context.
         public var values: Values
 
@@ -70,6 +66,31 @@ extension Witness {
             self.values = values
             self.mode = mode
         }
+    }
+}
+
+// MARK: - Context Key
+
+extension Witness.Context {
+    /// Internal key for storing `Witness.Context` in L1's dependency dictionary.
+    ///
+    /// Both `liveValue` and `testValue` return the same default context.
+    /// Mode is managed explicitly by ``_withScope(mode:_:operation:)-5f2ep``,
+    /// not by L1's `isTestContext` default chain.
+    @usableFromInline
+    internal enum _ContextKey: Dependency.Key {
+        @usableFromInline
+        static var liveValue: Witness.Context {
+            Witness.Context(values: .init(), mode: .live)
+        }
+
+        @usableFromInline
+        static var testValue: Witness.Context { liveValue }
+    }
+
+    /// Current context read from L1's dependency dictionary.
+    private static var _current: Witness.Context {
+        Dependency.Scope.current[_ContextKey.self]
     }
 }
 
@@ -105,6 +126,17 @@ extension Witness.Context {
         _current.values.value(for: key, mode: _current.mode)
     }
 
+    /// Gets the current value for an L1-only dependency key.
+    ///
+    /// Delegates to `Witness.Values`'s L1-key subscript, which checks
+    /// own storage first, then falls back to L1's `Dependency.Scope.current`.
+    ///
+    /// - Note: When `K` also conforms to `Witness.Key`, the more specific
+    ///   `Witness.Key` subscript is selected by overload resolution.
+    public static subscript<K: Dependency.Key>(key: K.Type) -> K.Value where K.Value: Copyable {
+        _current.values[K.self]
+    }
+
     /// Gets the value for a key with full resolution (total API).
     ///
     /// Per [API-IMPL-003], this returns a `Result` rather than throwing or trapping.
@@ -133,12 +165,79 @@ extension Witness.Context {
     }
 }
 
+// MARK: - Scope Bridge
+
+extension Witness.Context {
+    /// Infrastructure: single-push scope through L1's `@TaskLocal`.
+    ///
+    /// Routes all scoping through `Dependency.Scope.with`, storing the
+    /// witness context in L1's dictionary under an internal key. This
+    /// eliminates the need for a separate `@TaskLocal` in L3.
+    ///
+    /// The context key is reserved infrastructure and is overwritten
+    /// after `modify` returns. User L1-key writes via the second
+    /// `inout` parameter are preserved.
+    ///
+    /// - Parameters:
+    ///   - mode: Optional mode override. When non-nil, sets both
+    ///     `context.mode` and `l1Values.isTestContext`.
+    ///   - modify: A closure receiving witness values and L1 values
+    ///     for modification.
+    ///   - operation: The operation to execute in the new scope.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    @inlinable
+    public static func _withScope<T, E: Error>(
+        mode: Mode? = nil,
+        _ modify: (inout Witness.Values, inout Dependency_Primitives.Dependency.Values) -> Void,
+        operation: () throws(E) -> T
+    ) throws(E) -> T {
+        try Dependency.Scope.with({ l1Values in
+            var context = l1Values[_ContextKey.self]
+            if let mode {
+                context.mode = mode
+                l1Values.isTestContext = (mode == .test)
+            }
+            modify(&context.values, &l1Values)
+            l1Values[_ContextKey.self] = context
+        }, operation: operation)
+    }
+
+    /// Async variant of ``_withScope(mode:_:operation:)-5f2ep``.
+    ///
+    /// - Parameters:
+    ///   - isolation: The actor isolation context for the operation.
+    ///   - mode: Optional mode override.
+    ///   - modify: A closure receiving witness values and L1 values
+    ///     for modification.
+    ///   - operation: The async operation to execute in the new scope.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    @inlinable
+    public static func _withScope<T, E: Error>(
+        isolation: isolated (any Actor)? = #isolation,
+        mode: Mode? = nil,
+        _ modify: (inout Witness.Values, inout Dependency_Primitives.Dependency.Values) -> Void,
+        operation: () async throws(E) -> T
+    ) async throws(E) -> T {
+        try await Dependency.Scope.with({ l1Values in
+            var context = l1Values[_ContextKey.self]
+            if let mode {
+                context.mode = mode
+                l1Values.isTestContext = (mode == .test)
+            }
+            modify(&context.values, &l1Values)
+            l1Values[_ContextKey.self] = context
+        }, operation: operation)
+    }
+}
+
 // MARK: - Scoped Override (Synchronous)
 
 extension Witness.Context {
     /// Executes a closure with modified witness values.
     ///
-    /// Per [API-ERR-003], typed errors are preserved by construction via Result.
+    /// Per [API-ERR-003], typed errors are preserved by construction.
     ///
     /// - Parameters:
     ///   - modify: A closure that modifies the witness values for the scope.
@@ -149,15 +248,9 @@ extension Witness.Context {
         _ modify: (inout Witness.Values) -> Void,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        var context = _current
-        modify(&context.values)
-        return try $_current.withValue(context) {
-            do throws(E) {
-                return Result<T, E>.success(try operation())
-            } catch {
-                return Result<T, E>.failure(error)
-            }
-        }.get()
+        try _withScope({ witnessValues, _ in
+            modify(&witnessValues)
+        }, operation: operation)
     }
 
     /// Executes a closure with modified witness values and mode.
@@ -173,18 +266,9 @@ extension Witness.Context {
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        var context = _current
-        context.mode = mode
-        modify?(&context.values)
-        return try Dependency.Scope.with({ $0.isTestContext = (mode == .test) }) {
-            $_current.withValue(context) {
-                do throws(E) {
-                    return Result<T, E>.success(try operation())
-                } catch {
-                    return Result<T, E>.failure(error)
-                }
-            }
-        }.get()
+        try _withScope(mode: mode, { witnessValues, _ in
+            modify?(&witnessValues)
+        }, operation: operation)
     }
 }
 
@@ -196,7 +280,7 @@ extension Witness.Context {
     /// This overload preserves actor isolation, allowing the operation to run
     /// in the caller's isolation context.
     ///
-    /// Per [API-ERR-003], typed errors are preserved by construction via Result.
+    /// Per [API-ERR-003], typed errors are preserved by construction.
     ///
     /// - Parameters:
     ///   - isolation: The actor isolation context for the operation.
@@ -209,15 +293,9 @@ extension Witness.Context {
         _ modify: (inout Witness.Values) -> Void,
         operation: () async throws(E) -> T
     ) async throws(E) -> T {
-        var context = _current
-        modify(&context.values)
-        return try await $_current.withValue(context) {
-            do throws(E) {
-                return Result<T, E>.success(try await operation())
-            } catch {
-                return Result<T, E>.failure(error)
-            }
-        }.get()
+        try await _withScope(isolation: isolation, { witnessValues, _ in
+            modify(&witnessValues)
+        }, operation: operation)
     }
 
     /// Executes an async closure with modified witness values and mode.
@@ -235,19 +313,9 @@ extension Witness.Context {
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () async throws(E) -> T
     ) async throws(E) -> T {
-        var context = _current
-        context.mode = mode
-        modify?(&context.values)
-        let result: Result<T, E> = await Dependency.Scope.with({ $0.isTestContext = (mode == .test) }) {
-            await $_current.withValue(context) {
-                do throws(E) {
-                    return Result<T, E>.success(try await operation())
-                } catch {
-                    return Result<T, E>.failure(error)
-                }
-            }
-        }
-        return try result.get()
+        try await _withScope(isolation: isolation, mode: mode, { witnessValues, _ in
+            modify?(&witnessValues)
+        }, operation: operation)
     }
 }
 
@@ -267,18 +335,9 @@ extension Witness.Context {
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        var context = _current
-        context.mode = .test
-        modify?(&context.values)
-        return try Dependency.Scope.with({ $0.isTestContext = true }) {
-            $_current.withValue(context) {
-                do throws(E) {
-                    return Result<T, E>.success(try operation())
-                } catch {
-                    return Result<T, E>.failure(error)
-                }
-            }
-        }.get()
+        try _withScope(mode: .test, { witnessValues, _ in
+            modify?(&witnessValues)
+        }, operation: operation)
     }
 
     /// Executes a synchronous closure in preview mode.
@@ -294,18 +353,9 @@ extension Witness.Context {
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        var context = _current
-        context.mode = .preview
-        modify?(&context.values)
-        return try Dependency.Scope.with({ $0.isTestContext = false }) {
-            $_current.withValue(context) {
-                do throws(E) {
-                    return Result<T, E>.success(try operation())
-                } catch {
-                    return Result<T, E>.failure(error)
-                }
-            }
-        }.get()
+        try _withScope(mode: .preview, { witnessValues, _ in
+            modify?(&witnessValues)
+        }, operation: operation)
     }
 }
 
@@ -325,19 +375,9 @@ extension Witness.Context {
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () async throws(E) -> T
     ) async throws(E) -> T {
-        var context = _current
-        context.mode = .test
-        modify?(&context.values)
-        let result: Result<T, E> = await Dependency.Scope.with({ $0.isTestContext = true }) {
-            await $_current.withValue(context) {
-                do throws(E) {
-                    return Result<T, E>.success(try await operation())
-                } catch {
-                    return Result<T, E>.failure(error)
-                }
-            }
-        }
-        return try result.get()
+        try await _withScope(mode: .test, { witnessValues, _ in
+            modify?(&witnessValues)
+        }, operation: operation)
     }
 
     /// Executes an async closure in preview mode.
@@ -353,18 +393,8 @@ extension Witness.Context {
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () async throws(E) -> T
     ) async throws(E) -> T {
-        var context = _current
-        context.mode = .preview
-        modify?(&context.values)
-        let result: Result<T, E> = await Dependency.Scope.with({ $0.isTestContext = false }) {
-            await $_current.withValue(context) {
-                do throws(E) {
-                    return Result<T, E>.success(try await operation())
-                } catch {
-                    return Result<T, E>.failure(error)
-                }
-            }
-        }
-        return try result.get()
+        try await _withScope(mode: .preview, { witnessValues, _ in
+            modify?(&witnessValues)
+        }, operation: operation)
     }
 }

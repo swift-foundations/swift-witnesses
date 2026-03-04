@@ -12,6 +12,7 @@
 
 import Witness_Primitives
 public import Ownership_Primitives
+public import Dependency_Primitives
 
 extension Witness {
     /// A container for witness values keyed by their ``Witness/Key`` type.
@@ -197,6 +198,37 @@ extension Witness.Values {
                 unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
             }
             // Store new value (retained)
+            let box = Ownership.Shared(newValue)
+            let ptr = unsafe UnsafeRawPointer(Unmanaged.passRetained(box).toOpaque())
+            unsafe _storage.set(ptr, for: id)
+        }
+    }
+
+    /// Accesses the value for an L1-only dependency key.
+    ///
+    /// For get operations, checks own storage first, then falls back to
+    /// L1's `Dependency.Scope.current`. For set operations, stores the value
+    /// in this container (consistent with `Witness.Key` behavior).
+    ///
+    /// - Note: When `K` also conforms to `Witness.Key`, the more specific
+    ///   `Witness.Key` subscript is selected by overload resolution.
+    @inlinable
+    public subscript<K: Dependency.Key>(key: K.Type) -> K.Value where K.Value: Copyable {
+        get {
+            let id = ObjectIdentifier(K.self)
+            if let ptr = unsafe _storage.dict[id] {
+                return unsafe Unmanaged<Ownership.Shared<K.Value>>.fromOpaque(ptr)
+                    .takeUnretainedValue()
+                    .value
+            }
+            return Dependency.Scope.current[K.self]
+        }
+        set {
+            _ensureUnique()
+            let id = ObjectIdentifier(K.self)
+            if let oldPtr = unsafe _storage.dict[id] {
+                unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
+            }
             let box = Ownership.Shared(newValue)
             let ptr = unsafe UnsafeRawPointer(Unmanaged.passRetained(box).toOpaque())
             unsafe _storage.set(ptr, for: id)

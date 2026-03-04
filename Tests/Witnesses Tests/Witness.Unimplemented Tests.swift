@@ -240,6 +240,107 @@ extension Witness.Unimplemented.Test.Unit {
     }
 }
 
+// MARK: - Optional Closure Tests
+
+extension Witness.Unimplemented.Test.Unit {
+    @Test
+    func `Optional closure unimplemented produces nil`() {
+        let api = OptionalCallbackAPI.unimplemented()
+        #expect(api.onClose == nil)
+
+        // onEvent still throws
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            try api.onEvent(name: "test")
+        }
+    }
+
+    @Test
+    func `Optional closure can be set on unimplemented instance`() {
+        let called = Synchronization.Mutex(false)
+        var api = OptionalCallbackAPI.unimplemented()
+        api.onClose = { called.withLock { $0 = true } }
+        api.onClose?()
+        #expect(called.withLock { $0 })
+    }
+
+    @Test
+    func `Optional closure init defaults to nil`() {
+        let api = OptionalCallbackAPI(
+            onEvent: { _ in }
+        )
+        #expect(api.onClose == nil)
+    }
+
+    @Test
+    func `Optional closure observe before passes nil through`() {
+        let log = Synchronization.Mutex<[String]>([])
+        let base = OptionalCallbackAPI(
+            onEvent: { _ in },
+            onClose: nil
+        )
+        let observed = base.observe.before { action in
+            log.withLock { $0.append("before:\(action.case)") }
+        }
+        // onClose is nil — should remain nil after observe
+        #expect(observed.onClose == nil)
+
+        // onEvent triggers observer
+        try! observed.onEvent(name: "test")
+        let entries = log.withLock { $0 }
+        #expect(entries == ["before:onEvent"])
+    }
+
+    @Test
+    func `Optional closure observe wraps non-nil closure`() {
+        let log = Synchronization.Mutex<[String]>([])
+        let closeCalled = Synchronization.Mutex(false)
+        let base = OptionalCallbackAPI(
+            onEvent: { _ in },
+            onClose: { closeCalled.withLock { $0 = true } }
+        )
+        let observed = base.observe.before { action in
+            log.withLock { $0.append("before:\(action.case)") }
+        }
+        // onClose is non-nil — should trigger observer and original
+        observed.onClose?()
+        #expect(closeCalled.withLock { $0 })
+        let entries = log.withLock { $0 }
+        #expect(entries == ["before:onClose"])
+    }
+
+    @Test
+    func `Optional closure observe after wraps non-nil closure`() {
+        let log = Synchronization.Mutex<[String]>([])
+        let closeCalled = Synchronization.Mutex(false)
+        let base = OptionalCallbackAPI(
+            onEvent: { _ in },
+            onClose: { closeCalled.withLock { $0 = true } }
+        )
+        let observed = base.observe.after { outcome in
+            log.withLock { $0.append("after:\(outcome.action.case)") }
+        }
+        observed.onClose?()
+        #expect(closeCalled.withLock { $0 })
+        let entries = log.withLock { $0 }
+        #expect(entries == ["after:onClose"])
+    }
+}
+
+// MARK: - Access Level Tests
+
+extension Witness.Unimplemented.Test.Unit {
+    @Test
+    func `Restricted access struct compiles and works`() {
+        // Compile-only: verifies that @Witness with package property
+        // doesn't produce @usableFromInline on the restricted property
+        let api = RestrictedAccessAPI.unimplemented()
+        // open should throw
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            try api.open()
+        }
+    }
+}
+
 // MARK: - Observe Tests
 
 extension Witness.Unimplemented.Test.Unit {

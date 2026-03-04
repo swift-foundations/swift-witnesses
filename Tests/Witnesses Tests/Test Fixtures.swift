@@ -135,6 +135,28 @@ enum APINamespace {
     }
 }
 
+// MARK: - Optional Closure Fixture
+
+// WORKAROUND: Compound fixture names
+// WHY: All existing fixtures use compound names; changing one creates inconsistency
+// WHEN TO REMOVE: When all test fixtures are refactored to Nest.Name
+
+/// Witness with optional closure (e.g., IO.Completion.Wakeup.Channel pattern).
+@Witness
+struct OptionalCallbackAPI: Sendable {
+    var onEvent: @Sendable (_ name: String) throws(Witness.Unimplemented.Error) -> Void
+    var onClose: (@Sendable () -> Void)?
+}
+
+// MARK: - Access Level Fixture
+
+/// Witness with package property — verifies no @usableFromInline on restricted access.
+@Witness
+struct RestrictedAccessAPI: Sendable {
+    package var restricted: @Sendable () -> Void
+    var open: @Sendable () throws(Witness.Unimplemented.Error) -> Void
+}
+
 // MARK: - Witness.Key Fixtures
 
 extension TestAPI: Witness.Key {

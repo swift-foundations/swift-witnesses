@@ -1073,27 +1073,33 @@ private func generateUnimplementedClosure(for property: ClosureProperty, structN
     let returnType = property.returnType.trimmedDescription
     let hasConsumingParams = property.parameters.contains { $0.ownership == .consuming }
 
+    // Can only throw Witness.Unimplemented.Error when the closure's error type matches
+    let canThrowUnimplemented = property.isThrowing && (
+        property.throwsType == nil ||
+        property.throwsType?.trimmedDescription == "Witness.Unimplemented.Error"
+    )
+    let needsFatalError = !canThrowUnimplemented
+
     // Generate closure parameter list.
-    // Consuming params need named bindings so they can be consumed; others use _.
+    // Consuming params need named bindings when using fatalError (so they can be consumed).
     let closureStart: String
     if property.parameters.isEmpty {
         closureStart = "{ () \(throwsAnnotation)-> \(returnType) in"
-    } else if !property.isThrowing && hasConsumingParams {
-        // Non-throwing with consuming params: name consuming params, _ for rest
+    } else if needsFatalError && hasConsumingParams {
         let paramBindings = property.parameters.enumerated().map { index, param in
             if param.ownership == .consuming {
                 return "p\(index): consuming \(param.baseType)"
             }
             return "_"
         }.joined(separator: ", ")
-        closureStart = "{ (\(paramBindings)) -> \(returnType) in"
+        closureStart = "{ (\(paramBindings)) \(throwsAnnotation)-> \(returnType) in"
     } else {
         let underscoreParams = property.parameters.map { _ in "_" }.joined(separator: ", ")
         closureStart = "{ (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in"
     }
 
-    if property.isThrowing {
-        // Throwing closures: throw Witness.Unimplemented.Error
+    if canThrowUnimplemented {
+        // Throwing closures with compatible error type: throw Witness.Unimplemented.Error
         return """
 \(property.name): \(closureStart)
                 throw Witness.Unimplemented.Error(

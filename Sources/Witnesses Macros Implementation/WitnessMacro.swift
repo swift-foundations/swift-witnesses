@@ -531,9 +531,15 @@ struct ClosureParameter {
     /// `.borrowing` or `.consuming`, `nil` for default/`inout`
     let ownership: Keyword?
 
+    /// Whether this parameter has ownership semantics (`borrowing`/`consuming`/`inout`).
+    /// Owned parameters are omitted from Action enum associated values.
+    var isOwned: Bool {
+        isInout || ownership != nil
+    }
+
     /// The base type without ownership specifiers (`inout`/`borrowing`/`consuming`).
     var baseType: TypeSyntax {
-        if isInout || ownership != nil,
+        if isOwned,
            let attributed = type.as(AttributedTypeSyntax.self) {
             return attributed.baseType
         }
@@ -769,13 +775,15 @@ private func generateMethodSignature(name: String, functionType: FunctionTypeSyn
 private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax {
     let caseCount = properties.count
 
-    // Generate Action cases (inputs only, ownership specifiers stripped)
+    // Generate Action cases (inputs only, owned params omitted)
     let actionCases = properties.map { property in
-        if property.parameters.isEmpty {
+        let copyableParams = property.parameters.filter { !$0.isOwned }
+
+        if copyableParams.isEmpty {
             return "case \(property.methodName)"
         }
 
-        let associatedValues = property.parameters.enumerated().map { index, param in
+        let associatedValues = copyableParams.map { param in
             if let label = param.label {
                 return "\(label): \(param.baseType)"
             } else {
@@ -925,8 +933,11 @@ private func generatePrismProperties(for properties: [ClosureProperty]) -> Strin
 }
 
 /// Generates a single prism property for a closure property.
+/// Only Copyable (non-owned) parameters appear in the prism type.
 private func generatePrismProperty(for property: ClosureProperty) -> String {
-    if property.parameters.isEmpty {
+    let copyableParams = property.parameters.filter { !$0.isOwned }
+
+    if copyableParams.isEmpty {
         // Case with no associated values - prism to Void
         return """
         public var \(property.methodName): Optic_Primitives.Optic.Prism<Action, Void> {
@@ -936,9 +947,9 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
                     )
                 }
         """
-    } else if property.parameters.count == 1 {
+    } else if copyableParams.count == 1 {
         // Single parameter - prism directly to that type (ownership stripped)
-        let param = property.parameters[0]
+        let param = copyableParams[0]
         let paramType = param.baseType.trimmedDescription
         let embedArg = param.label != nil ? "\(param.label!): $0" : "$0"
         let extractPattern = param.label != nil ? "\(param.label!): let v" : "let v"
@@ -953,7 +964,7 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
         """
     } else {
         // Multiple parameters - prism to a labeled tuple (ownership stripped)
-        let tupleTypes = property.parameters.map { param in
+        let tupleTypes = copyableParams.map { param in
             if let label = param.label {
                 return "\(label): \(param.baseType.trimmedDescription)"
             } else {
@@ -961,7 +972,7 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
             }
         }.joined(separator: ", ")
 
-        let embedArgs = property.parameters.enumerated().map { index, param in
+        let embedArgs = copyableParams.enumerated().map { index, param in
             if let label = param.label {
                 return "\(label): $0.\(index)"
             } else {
@@ -969,7 +980,7 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
             }
         }.joined(separator: ", ")
 
-        let extractPatterns = property.parameters.enumerated().map { index, param in
+        let extractPatterns = copyableParams.enumerated().map { index, param in
             if let label = param.label {
                 return "\(label): let v\(index)"
             } else {
@@ -977,7 +988,7 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
             }
         }.joined(separator: ", ")
 
-        let extractTuple = property.parameters.enumerated().map { index, param in
+        let extractTuple = copyableParams.enumerated().map { index, param in
             if let label = param.label {
                 return "\(label): v\(index)"
             } else {
@@ -1039,19 +1050,30 @@ private func generateUnimplementedClosure(for property: ClosureProperty, structN
     }
 
     let returnType = property.returnType.trimmedDescription
+    let hasConsumingParams = property.parameters.contains { $0.ownership == .consuming }
 
-    // Generate closure with explicit typed throws annotation
-    // Syntax: { (params) throws(E) -> T in body }
+    // Generate closure parameter list.
+    // Consuming params need named bindings so they can be consumed; others use _.
     let closureStart: String
     if property.parameters.isEmpty {
         closureStart = "{ () \(throwsAnnotation)-> \(returnType) in"
+    } else if !property.isThrowing && hasConsumingParams {
+        // Non-throwing with consuming params: name consuming params, _ for rest
+        let paramBindings = property.parameters.enumerated().map { index, param in
+            if param.ownership == .consuming {
+                return "p\(index): consuming \(param.baseType)"
+            }
+            return "_"
+        }.joined(separator: ", ")
+        closureStart = "{ (\(paramBindings)) -> \(returnType) in"
     } else {
         let underscoreParams = property.parameters.map { _ in "_" }.joined(separator: ", ")
         closureStart = "{ (\(underscoreParams)) \(throwsAnnotation)-> \(returnType) in"
     }
 
-    // All unimplemented closures throw the error
-    return """
+    if property.isThrowing {
+        // Throwing closures: throw Witness.Unimplemented.Error
+        return """
 \(property.name): \(closureStart)
                 throw Witness.Unimplemented.Error(
                     witness: "\(structName)",
@@ -1060,6 +1082,26 @@ private func generateUnimplementedClosure(for property: ClosureProperty, structN
                 )
             }
 """
+    } else if hasConsumingParams {
+        // Non-throwing with consuming params: consume then fatalError
+        let consumeStatements = property.parameters.enumerated().compactMap { index, param -> String? in
+            guard param.ownership == .consuming else { return nil }
+            return "_ = consume p\(index)"
+        }.joined(separator: "\n                ")
+        return """
+\(property.name): \(closureStart)
+                \(consumeStatements)
+                fatalError("\\(\(structName).self).\\(#function) is unimplemented")
+            }
+"""
+    } else {
+        // Non-throwing, no consuming params: just fatalError
+        return """
+\(property.name): \(closureStart)
+                fatalError("\\(\(structName).self).\\(#function) is unimplemented")
+            }
+"""
+    }
 }
 
 private func buildOperationSignature(for property: ClosureProperty) -> String {
@@ -1152,11 +1194,22 @@ private func generateObserveProperty() -> DeclSyntax {
 private func generateBothObserveClosure(for property: ClosureProperty, structName: String) -> String {
     let captureList = "[witness]"
     let parameterNames = property.parameters.enumerated().map { index, param in
-        param.label ?? "p\(index)"
+        let name = param.label ?? "p\(index)"
+        if param.isInout {
+            return "\(name): inout \(param.baseType)"
+        } else if let ownership = param.ownership {
+            return "\(name): \(ownership) \(param.baseType)"
+        }
+        return name
     }
     let callArgs = property.parameters.enumerated().map { index, param in
         let name = param.label ?? "p\(index)"
-        return param.isInout ? "&\(name)" : name
+        if param.isInout {
+            return "&\(name)"
+        } else if param.ownership == .consuming {
+            return "consume \(name)"
+        }
+        return name
     }.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
@@ -1219,11 +1272,22 @@ private func generateBothObserveClosure(for property: ClosureProperty, structNam
 private func generateBeforeObserveClosure(for property: ClosureProperty, structName: String) -> String {
     let captureList = "[witness]"
     let parameterNames = property.parameters.enumerated().map { index, param in
-        param.label ?? "p\(index)"
+        let name = param.label ?? "p\(index)"
+        if param.isInout {
+            return "\(name): inout \(param.baseType)"
+        } else if let ownership = param.ownership {
+            return "\(name): \(ownership) \(param.baseType)"
+        }
+        return name
     }
     let callArgs = property.parameters.enumerated().map { index, param in
         let name = param.label ?? "p\(index)"
-        return param.isInout ? "&\(name)" : name
+        if param.isInout {
+            return "&\(name)"
+        } else if param.ownership == .consuming {
+            return "consume \(name)"
+        }
+        return name
     }.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
@@ -1258,11 +1322,22 @@ private func generateBeforeObserveClosure(for property: ClosureProperty, structN
 private func generateAfterObserveClosure(for property: ClosureProperty, structName: String) -> String {
     let captureList = "[witness]"
     let parameterNames = property.parameters.enumerated().map { index, param in
-        param.label ?? "p\(index)"
+        let name = param.label ?? "p\(index)"
+        if param.isInout {
+            return "\(name): inout \(param.baseType)"
+        } else if let ownership = param.ownership {
+            return "\(name): \(ownership) \(param.baseType)"
+        }
+        return name
     }
     let callArgs = property.parameters.enumerated().map { index, param in
         let name = param.label ?? "p\(index)"
-        return param.isInout ? "&\(name)" : name
+        if param.isInout {
+            return "&\(name)"
+        } else if param.ownership == .consuming {
+            return "consume \(name)"
+        }
+        return name
     }.joined(separator: ", ")
     let actionConstruction = formatActionConstruction(for: property)
 
@@ -1321,12 +1396,14 @@ private func generateAfterObserveClosure(for property: ClosureProperty, structNa
 }
 
 /// Formats action construction: `.propertyName` or `.propertyName(label: value, ...)`
+/// Only includes Copyable (non-owned) parameters in the Action construction.
 private func formatActionConstruction(for property: ClosureProperty) -> String {
-    if property.parameters.isEmpty {
+    let copyableParams = property.parameters.filter { !$0.isOwned }
+    if copyableParams.isEmpty {
         return ".\(property.methodName)"
     }
-    let args = property.parameters.enumerated().map { index, param in
-        let name = param.label ?? "p\(index)"
+    let args = copyableParams.map { param in
+        let name = param.internalName
         if let label = param.label {
             return "\(label): \(name)"
         } else {

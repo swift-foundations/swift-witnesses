@@ -140,7 +140,7 @@ extension WitnessMacro: MemberMacro {
         }
 
         // Generate Calls enum
-        members.append(generateCallsEnum(for: closureProperties))
+        members.append(contentsOf: generateCallsMembers(for: closureProperties))
 
         // Typealias for use in nested types (Observe) where bare struct name may not resolve
         if isPublic {
@@ -876,14 +876,14 @@ private func generateMethodSignature(name: String, functionType: FunctionTypeSyn
 
 // MARK: - Calls Enum Generation
 
-private func generateCallsEnum(for properties: [ClosureProperty]) -> DeclSyntax {
+private func generateCallsMembers(for properties: [ClosureProperty]) -> [DeclSyntax] {
     let actionCases = generateCallsCases(for: properties)
     let caseEnum = generateCaseEnum(for: properties)
     let caseProperty = generateCallsCaseProperty(for: properties)
     let resultEnum = generateResultEnum(for: properties)
     let prismProperties = generatePrismProperties(for: properties)
 
-    return """
+    let callsEnum: DeclSyntax = """
         public enum Calls: Sendable {
             \(raw: actionCases)
 
@@ -892,24 +892,6 @@ private func generateCallsEnum(for properties: [ClosureProperty]) -> DeclSyntax 
 
             /// This action's case discriminant.
             \(raw: caseProperty)
-
-            /// Typed result for each action, preserving the specific success and error types.
-            \(raw: resultEnum)
-
-            /// An action paired with its typed result.
-            public struct Outcome: ~Copyable {
-                public let action: Calls
-                public let result: Result
-
-                @inlinable
-                public init(action: Calls, result: consuming Result) {
-                    self.action = action
-                    self.result = result
-                }
-
-                @usableFromInline
-                consuming func __consumeResult() -> Result { result }
-            }
 
             /// Prisms for each action case, enabling type-safe case matching and extraction.
             public struct Prisms: Sendable {
@@ -936,6 +918,30 @@ private func generateCallsEnum(for properties: [ClosureProperty]) -> DeclSyntax 
             }
         }
         """
+
+    let resultDecl: DeclSyntax = """
+        /// Typed result for each call, preserving the specific success and error types.
+        \(raw: resultEnum)
+        """
+
+    let outcomeDecl: DeclSyntax = """
+        /// A call paired with its typed result.
+        public struct Outcome: ~Copyable {
+            public let action: Calls
+            public let result: Result
+
+            @inlinable
+            public init(action: Calls, result: consuming Result) {
+                self.action = action
+                self.result = result
+            }
+
+            @usableFromInline
+            consuming func __consumeResult() -> Result { result }
+        }
+        """
+
+    return [callsEnum, resultDecl, outcomeDecl]
 }
 
 /// Generates the case declarations for the Calls enum.
@@ -1195,7 +1201,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
 
             \(raw: inlinableAttr)public func callAsFunction(
                 _ before: @escaping @Sendable (Calls) -> Void,
-                after: @escaping @Sendable (borrowing Calls.Outcome) -> Void
+                after: @escaping @Sendable (borrowing Outcome) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: bothInitArgs)
@@ -1211,7 +1217,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
             }
 
             \(raw: inlinableAttr)public func after(
-                _ observer: @escaping @Sendable (borrowing Calls.Outcome) -> Void
+                _ observer: @escaping @Sendable (borrowing Outcome) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: afterInitArgs)
@@ -1309,7 +1315,7 @@ private func generateObserveBody(
     }
 
     func outcomeExpr(witnessResult: String) -> String {
-        "Calls.Outcome(action: action, result: Calls.Result.\(property.methodName)(\(witnessResult)))"
+        "Outcome(action: action, result: Result.\(property.methodName)(\(witnessResult)))"
     }
 
     switch variant {

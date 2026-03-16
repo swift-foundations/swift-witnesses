@@ -16,7 +16,7 @@ import Testing
 // MARK: - Enum Expansion Fixtures
 
 @Witness
-enum TestAction: Sendable {
+enum TestCalls: Sendable {
     case load
     case save(path: String)
     case transform(input: Int, scale: Double)
@@ -24,7 +24,7 @@ enum TestAction: Sendable {
 
 /// Enum with keyword case names to test escaping.
 @Witness
-enum KeywordAction: Sendable {
+enum KeywordCalls: Sendable {
     case `default`
     case `return`(value: String)
 }
@@ -41,14 +41,14 @@ extension Witness {
 extension Witness.EnumTest.Unit {
     @Test
     func `Computed property extracts Void for parameterless case`() {
-        let action = TestAction.load
+        let action = TestCalls.load
         #expect(action.load != nil)
         #expect(action.save == nil)
     }
 
     @Test
     func `Computed property extracts single associated value`() {
-        let action = TestAction.save(path: "/tmp")
+        let action = TestCalls.save(path: "/tmp")
         #expect(action.save == "/tmp")
         #expect(action.load == nil)
         #expect(action.transform == nil)
@@ -56,7 +56,7 @@ extension Witness.EnumTest.Unit {
 
     @Test
     func `Computed property extracts multi-param tuple`() {
-        let action = TestAction.transform(input: 1, scale: 2.0)
+        let action = TestCalls.transform(input: 1, scale: 2.0)
         if let t = action.transform {
             #expect(t.input == 1)
             #expect(t.scale == 2.0)
@@ -67,24 +67,24 @@ extension Witness.EnumTest.Unit {
 
     @Test
     func `Case discriminant matches`() {
-        #expect(TestAction.load.case == .load)
-        #expect(TestAction.save(path: "x").case == .save)
-        #expect(TestAction.transform(input: 0, scale: 0).case == .transform)
+        #expect(TestCalls.load.case == .load)
+        #expect(TestCalls.save(path: "x").case == .save)
+        #expect(TestCalls.transform(input: 0, scale: 0).case == .transform)
     }
 
     @Test
     func `Case count and ordinal`() {
-        #expect(TestAction.Case.count.rawValue == 3)
-        #expect(TestAction.Case.load.ordinal.rawValue == 0)
-        #expect(TestAction.Case.save.ordinal.rawValue == 1)
-        #expect(TestAction.Case.transform.ordinal.rawValue == 2)
+        #expect(TestCalls.Case.count.rawValue == 3)
+        #expect(TestCalls.Case.load.ordinal.rawValue == 0)
+        #expect(TestCalls.Case.save.ordinal.rawValue == 1)
+        #expect(TestCalls.Case.transform.ordinal.rawValue == 2)
     }
 
     @Test
     func `Case init from ordinal`() throws {
-        let c0 = try TestAction.Case(__unchecked: (), ordinal: .init(0))
-        let c1 = try TestAction.Case(__unchecked: (), ordinal: .init(1))
-        let c2 = try TestAction.Case(__unchecked: (), ordinal: .init(2))
+        let c0 = try TestCalls.Case(__unchecked: (), ordinal: .init(0))
+        let c1 = try TestCalls.Case(__unchecked: (), ordinal: .init(1))
+        let c2 = try TestCalls.Case(__unchecked: (), ordinal: .init(2))
         #expect(c0 == .load)
         #expect(c1 == .save)
         #expect(c2 == .transform)
@@ -92,32 +92,32 @@ extension Witness.EnumTest.Unit {
 
     @Test
     func `is prism check`() {
-        #expect(TestAction.load.is(\.load) == true)
-        #expect(TestAction.save(path: "x").is(\.load) == false)
-        #expect(TestAction.save(path: "x").is(\.save) == true)
+        #expect(TestCalls.load.is(\.load) == true)
+        #expect(TestCalls.save(path: "x").is(\.load) == false)
+        #expect(TestCalls.save(path: "x").is(\.save) == true)
     }
 
     @Test
     func `Subscript prism extraction`() {
-        let action = TestAction.save(path: "/home")
+        let action = TestCalls.save(path: "/home")
         #expect(action[prism: \.save] == "/home")
         #expect(action[prism: \.load] == nil)
     }
 
     @Test
     func `Modify via prism`() {
-        var action = TestAction.save(path: "/old")
+        var action = TestCalls.save(path: "/old")
         action.modify(\.save) { $0 = "/new" }
         #expect(action.save == "/new")
     }
 
     @Test
     func `Keyword case names compile and work`() {
-        let d = KeywordAction.default
+        let d = KeywordCalls.default
         #expect(d.`default` != nil)
         #expect(d.`return` == nil)
 
-        let r = KeywordAction.return(value: "hello")
+        let r = KeywordCalls.return(value: "hello")
         #expect(r.`return` == "hello")
         #expect(r.`default` == nil)
     }

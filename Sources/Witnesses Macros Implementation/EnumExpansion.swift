@@ -282,7 +282,7 @@ private func generateEnumPrismProperty(for enumCase: EnumCase, enumName: String)
 
 // MARK: - Shared Prism Generation
 
-/// Common representation for a prism case, used by both Action (struct) and enum prism generation.
+/// Common representation for a prism case, used by both Calls (struct) and enum prism generation.
 struct PrismCase {
     let caseName: String
     let rootTypeName: String

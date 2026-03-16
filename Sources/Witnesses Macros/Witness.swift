@@ -86,7 +86,7 @@ extension Witness {
 ///
 /// Apply `@Witness` to a struct containing closure properties to automatically generate:
 /// - **Methods** with argument labels for closures that have labeled parameters
-/// - **Action enum** with cases for each closure, useful for observation/middleware
+/// - **Calls enum** with cases for each closure, useful for observation/middleware
 /// - **`observe`** accessor to wrap the witness with observers
 /// - **`unimplemented()`** static method that returns a witness where all operations throw
 ///
@@ -114,11 +114,11 @@ extension Witness {
 /// - **Labeled** (`(_ id: Int) -> T`): Generates a method with that label, deprecates the closure property
 /// - **Unlabeled** (`(Int) -> T`): No method generated, closure remains the only API
 ///
-/// ## Generated Action Enum
+/// ## Generated Calls Enum
 ///
 /// ```swift
 /// extension APIClient {
-///     enum Action: Sendable {
+///     enum Calls: Sendable {
 ///         case fetchUser(id: User.ID)
 ///         case updateUser(id: User.ID, name: String)
 ///         case deleteUser(id: User.ID)

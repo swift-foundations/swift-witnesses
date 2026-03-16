@@ -139,8 +139,8 @@ extension WitnessMacro: MemberMacro {
             }
         }
 
-        // Generate Action enum
-        members.append(generateActionEnum(for: closureProperties))
+        // Generate Calls enum
+        members.append(generateCallsEnum(for: closureProperties))
 
         // Typealias for use in nested types (Observe) where bare struct name may not resolve
         if isPublic {
@@ -627,7 +627,7 @@ struct ClosureParameter {
     let ownership: Keyword?
 
     /// Whether this parameter has an explicit ownership annotation (`borrowing`/`consuming`/`inout`).
-    /// Parameters with ownership annotations are omitted from Action enum associated values.
+    /// Parameters with ownership annotations are omitted from Calls enum associated values.
     var hasOwnershipAnnotation: Bool {
         isInout || ownership != nil
     }
@@ -874,17 +874,17 @@ private func generateMethodSignature(name: String, functionType: FunctionTypeSyn
     return "\(name)(\(labelString))"
 }
 
-// MARK: - Action Enum Generation
+// MARK: - Calls Enum Generation
 
-private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax {
-    let actionCases = generateActionCases(for: properties)
+private func generateCallsEnum(for properties: [ClosureProperty]) -> DeclSyntax {
+    let actionCases = generateCallsCases(for: properties)
     let caseEnum = generateCaseEnum(for: properties)
-    let caseProperty = generateActionCaseProperty(for: properties)
+    let caseProperty = generateCallsCaseProperty(for: properties)
     let resultEnum = generateResultEnum(for: properties)
     let prismProperties = generatePrismProperties(for: properties)
 
     return """
-        public enum Action: Sendable {
+        public enum Calls: Sendable {
             \(raw: actionCases)
 
             /// The enumerable case discriminant (without associated values).
@@ -898,11 +898,11 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
 
             /// An action paired with its typed result.
             public struct Outcome: ~Copyable {
-                public let action: Action
+                public let action: Calls
                 public let result: Result
 
                 @inlinable
-                public init(action: Action, result: consuming Result) {
+                public init(action: Calls, result: consuming Result) {
                     self.action = action
                     self.result = result
                 }
@@ -925,21 +925,21 @@ private func generateActionEnum(for properties: [ClosureProperty]) -> DeclSyntax
 
             /// Checks if this action matches the given prism.
             @inlinable
-            public func `is`<Value>(_ keyPath: KeyPath<Prisms, Optic_Primitives.Optic.Prism<Action, Value>>) -> Bool {
+            public func `is`<Value>(_ keyPath: KeyPath<Prisms, Optic_Primitives.Optic.Prism<Calls, Value>>) -> Bool {
                 Self.prisms[keyPath: keyPath].extract(self) != nil
             }
 
             /// Extracts the associated value for the given prism, if this action matches.
             @inlinable
-            public subscript<Value>(prism keyPath: KeyPath<Prisms, Optic_Primitives.Optic.Prism<Action, Value>>) -> Value? {
+            public subscript<Value>(prism keyPath: KeyPath<Prisms, Optic_Primitives.Optic.Prism<Calls, Value>>) -> Value? {
                 Self.prisms[keyPath: keyPath].extract(self)
             }
         }
         """
 }
 
-/// Generates the case declarations for the Action enum.
-private func generateActionCases(for properties: [ClosureProperty]) -> String {
+/// Generates the case declarations for the Calls enum.
+private func generateCallsCases(for properties: [ClosureProperty]) -> String {
     properties.map { property in
         let copyableParams = property.parameters.filter { !$0.hasOwnershipAnnotation }
         if copyableParams.isEmpty {
@@ -997,8 +997,8 @@ private func generateCaseEnum(for properties: [ClosureProperty]) -> String {
     """
 }
 
-/// Generates the Action → Case property.
-private func generateActionCaseProperty(for properties: [ClosureProperty]) -> String {
+/// Generates the Calls → Case property.
+private func generateCallsCaseProperty(for properties: [ClosureProperty]) -> String {
     let cases = properties.map { "case .\($0.methodName): .\($0.methodName)" }
         .joined(separator: "\n                ")
     return """
@@ -1044,7 +1044,7 @@ private func generatePrismProperty(for property: ClosureProperty) -> String {
     let copyableParams = property.parameters.filter { !$0.hasOwnershipAnnotation }
     let prismCase = PrismCase(
         caseName: property.methodName,
-        rootTypeName: "Action",
+        rootTypeName: "Calls",
         parameters: copyableParams.map { ($0.label, $0.baseType.trimmedDescription) }
     )
     return generatePrism(for: prismCase)
@@ -1194,8 +1194,8 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
             }
 
             \(raw: inlinableAttr)public func callAsFunction(
-                _ before: @escaping @Sendable (Action) -> Void,
-                after: @escaping @Sendable (borrowing Action.Outcome) -> Void
+                _ before: @escaping @Sendable (Calls) -> Void,
+                after: @escaping @Sendable (borrowing Calls.Outcome) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: bothInitArgs)
@@ -1203,7 +1203,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
             }
 
             \(raw: inlinableAttr)public func before(
-                _ observer: @escaping @Sendable (Action) -> Void
+                _ observer: @escaping @Sendable (Calls) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: beforeInitArgs)
@@ -1211,7 +1211,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
             }
 
             \(raw: inlinableAttr)public func after(
-                _ observer: @escaping @Sendable (borrowing Action.Outcome) -> Void
+                _ observer: @escaping @Sendable (borrowing Calls.Outcome) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: afterInitArgs)
@@ -1288,7 +1288,7 @@ private func generateObserveBody(
     variant: ObserveVariant,
     callExpression: String
 ) -> String {
-    let actionConstruction = formatActionConstruction(for: property)
+    let actionConstruction = formatCallsConstruction(for: property)
     let returnType = property.returnType.trimmedDescription
     let hasReturn = !property.returnsVoid
     let errorType = property.throwsType?.trimmedDescription ?? "Never"
@@ -1309,7 +1309,7 @@ private func generateObserveBody(
     }
 
     func outcomeExpr(witnessResult: String) -> String {
-        "Action.Outcome(action: action, result: Action.Result.\(property.methodName)(\(witnessResult)))"
+        "Calls.Outcome(action: action, result: Calls.Result.\(property.methodName)(\(witnessResult)))"
     }
 
     switch variant {
@@ -1343,7 +1343,7 @@ private func generateObserveBody(
         }
         let doThrowsType = property.throwsType?.trimmedDescription ?? "any Error"
         return """
-                        let action: Action = \(actionConstruction)
+                        let action: Calls = \(actionConstruction)
                         \(beforeLine)do throws(\(doThrowsType)) {
                             \(hasReturn ? "let result = " : "")try \(property.awaitPrefix)\(callExpression)
                             \(successBody)
@@ -1376,7 +1376,7 @@ private func generateObserveBody(
             """
         }
         return """
-                        let action: Action = \(actionConstruction)
+                        let action: Calls = \(actionConstruction)
                         \(beforeLine)\(hasReturn ? "let result = " : "")\(property.awaitPrefix)\(callExpression)
                         \(resultBody)
         """
@@ -1384,8 +1384,8 @@ private func generateObserveBody(
 }
 
 /// Formats action construction: `.propertyName` or `.propertyName(label: value, ...)`
-/// Only includes Copyable (non-owned) parameters in the Action construction.
-private func formatActionConstruction(for property: ClosureProperty) -> String {
+/// Only includes Copyable (non-owned) parameters in the Calls construction.
+private func formatCallsConstruction(for property: ClosureProperty) -> String {
     let copyableParams = property.parameters.filter { !$0.hasOwnershipAnnotation }
     if copyableParams.isEmpty {
         return ".\(property.methodName)"

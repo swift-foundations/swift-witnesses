@@ -94,7 +94,7 @@ struct NoncopyableHandle: ~Copyable, Sendable {
 }
 
 /// Witness with ~Copyable ownership patterns matching IO.Event.Driver's shape.
-/// Tests the omission pattern: borrowing/consuming/inout params are omitted from Action.
+/// Tests the omission pattern: borrowing/consuming/inout params are omitted from Calls.
 @Witness
 struct NoncopyableDriverAPI: Sendable {
     let _create: @Sendable () throws(Witness.Unimplemented.Error) -> NoncopyableHandle

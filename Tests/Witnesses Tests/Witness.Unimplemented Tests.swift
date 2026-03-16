@@ -125,9 +125,9 @@ extension Witness.Unimplemented.Test.Unit {
     }
 
     @Test
-    func `Noncopyable driver Action omits owned params`() {
-        // register takes (borrowing NoncopyableHandle, Int32) → only Int32 in Action
-        let action = NoncopyableDriverAPI.Action.register(42)
+    func `Noncopyable driver Calls omits owned params`() {
+        // register takes (borrowing NoncopyableHandle, Int32) → only Int32 in Calls
+        let action = NoncopyableDriverAPI.Calls.register(42)
         if case .register(let descriptor) = action {
             #expect(descriptor == 42)
         } else {
@@ -135,24 +135,24 @@ extension Witness.Unimplemented.Test.Unit {
         }
 
         // close takes (consuming NoncopyableHandle) → no associated values
-        let closeAction = NoncopyableDriverAPI.Action.close
-        #expect(closeAction.case == .close)
+        let closeCalls = NoncopyableDriverAPI.Calls.close
+        #expect(closeCalls.case == .close)
 
         // poll takes (borrowing NoncopyableHandle, inout [Int32]) → no associated values
-        let pollAction = NoncopyableDriverAPI.Action.poll
-        #expect(pollAction.case == .poll)
+        let pollCalls = NoncopyableDriverAPI.Calls.poll
+        #expect(pollCalls.case == .poll)
 
         // create has no params → no associated values
-        let createAction = NoncopyableDriverAPI.Action.create
-        #expect(createAction.case == .create)
+        let createCalls = NoncopyableDriverAPI.Calls.create
+        #expect(createCalls.case == .create)
     }
 
     @Test
-    func `Noncopyable driver Action.Result carries actual return types`() throws {
-        // With the heuristic eliminated, NoncopyableHandle appears in Action.Result
+    func `Noncopyable driver Calls.Result carries actual return types`() throws {
+        // With the heuristic eliminated, NoncopyableHandle appears in Calls.Result
         // instead of being replaced with Void. Verify by constructing outcomes.
         let handle = NoncopyableHandle(fd: 42)
-        let result = NoncopyableDriverAPI.Action.Result.create(
+        let result = NoncopyableDriverAPI.Calls.Result.create(
             Standard_Library_Extensions.Result<NoncopyableHandle, Witness.Unimplemented.Error>.success(handle)
         )
         switch consume result {

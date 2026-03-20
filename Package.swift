@@ -21,6 +21,10 @@ let package = Package(
             name: "Witnesses Macros",
             targets: ["Witnesses Macros"]
         ),
+        .library(
+            name: "Witnesses Test Support",
+            targets: ["Witnesses Test Support"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0"..<"603.0.0"),
@@ -59,6 +63,13 @@ let package = Package(
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
                 .product(name: "SwiftDiagnostics", package: "swift-syntax"),
             ]
+        ),
+        .target(
+            name: "Witnesses Test Support",
+            dependencies: [
+                "Witnesses",
+            ],
+            path: "Tests/Support"
         ),
         .testTarget(
             name: "Witnesses Tests",

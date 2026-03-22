@@ -43,7 +43,7 @@ extension Witness.Preparation {
 
         /// Creates an empty store.
         public init() {
-            self.storage = [:]
+            unsafe (self.storage = [:])
             self.lock = Mutex(())
         }
 
@@ -127,7 +127,8 @@ extension Witness.Preparation {
 
         /// Releases all retained boxes on deallocation.
         deinit {
-            for ptr in storage.values {
+            var iter = unsafe storage.values.makeIterator()
+            while let ptr = unsafe iter.next() {
                 unsafe Unmanaged<AnyObject>.fromOpaque(ptr).release()
             }
         }

@@ -46,17 +46,18 @@ extension Witness {
 
             @usableFromInline
             init() {
-                self.dict = [:]
+                unsafe (self.dict = [:])
             }
 
             @usableFromInline
             func set(_ ptr: UnsafeRawPointer, for key: ObjectIdentifier) {
-                dict[key] = ptr
+                unsafe (dict[key] = ptr)
             }
 
             /// Releases all retained boxes on deallocation.
             deinit {
-                for ptr in dict.values {
+                var iter = unsafe dict.values.makeIterator()
+                while let ptr = unsafe iter.next() {
                     unsafe Unmanaged<AnyObject>.fromOpaque(ptr).release()
                 }
             }
@@ -95,7 +96,8 @@ extension Witness.Values {
         if !isKnownUniquelyReferenced(&_storage) {
             let newStorage = _Storage()
             // Copy all entries (retaining each box)
-            for (key, ptr) in unsafe _storage.dict {
+            var iter = unsafe _storage.dict.makeIterator()
+            while let (key, ptr) = unsafe iter.next() {
                 _ = unsafe Unmanaged<AnyObject>.fromOpaque(ptr).retain()
                 unsafe newStorage.set(ptr, for: key)
             }
@@ -277,7 +279,8 @@ extension Witness.Values {
 extension Witness.Values._Storage {
     @usableFromInline
     func copyFrom(_ other: Witness.Values._Storage) {
-        for (key, ptr) in unsafe other.dict {
+        var iter = unsafe other.dict.makeIterator()
+        while let (key, ptr) = unsafe iter.next() {
             if let oldPtr = unsafe dict[key] {
                 unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
             }

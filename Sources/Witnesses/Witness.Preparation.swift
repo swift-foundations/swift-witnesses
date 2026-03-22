@@ -63,15 +63,14 @@ extension Witness.Preparation {
     /// Values set in the store are used as fallbacks when resolving witnesses.
     ///
     /// - Parameters:
-    ///   - isolation: The actor isolation context for the operation.
     ///   - configure: A closure that configures the preparation store.
     ///   - operation: The operation to execute with prepared values.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
+    nonisolated(nonsending)
     public static func with<T, E: Error>(
-        isolation: isolated (any Actor)? = #isolation,
         _ configure: (Store) -> Void,
-        operation: () async throws(E) -> T
+        operation: nonisolated(nonsending) () async throws(E) -> T
     ) async throws(E) -> T {
         let newStore = Store()
         configure(newStore)

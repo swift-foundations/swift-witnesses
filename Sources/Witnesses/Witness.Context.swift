@@ -206,7 +206,6 @@ extension Witness.Context {
     /// Async variant of ``_withScope(mode:_:operation:)-5f2ep``.
     ///
     /// - Parameters:
-    ///   - isolation: The actor isolation context for the operation.
     ///   - mode: Optional mode override.
     ///   - modify: A closure receiving witness values and L1 values
     ///     for modification.
@@ -214,11 +213,11 @@ extension Witness.Context {
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
     @inlinable
+    nonisolated(nonsending)
     public static func _withScope<T, E: Error>(
-        isolation: isolated (any Actor)? = #isolation,
         mode: Mode? = nil,
         _ modify: (inout Witness.Values, inout Dependency_Primitives.Dependency.Values) -> Void,
-        operation: () async throws(E) -> T
+        operation: nonisolated(nonsending) () async throws(E) -> T
     ) async throws(E) -> T {
         try await Dependency.Scope.with({ l1Values in
             var context = l1Values[_ContextKey.self]
@@ -283,17 +282,16 @@ extension Witness.Context {
     /// Per [API-ERR-003], typed errors are preserved by construction.
     ///
     /// - Parameters:
-    ///   - isolation: The actor isolation context for the operation.
     ///   - modify: A closure that modifies the witness values for the scope.
     ///   - operation: The async operation to execute with the modified values.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
+    nonisolated(nonsending)
     public static func with<T, E: Error>(
-        isolation: isolated (any Actor)? = #isolation,
         _ modify: (inout Witness.Values) -> Void,
-        operation: () async throws(E) -> T
+        operation: nonisolated(nonsending) () async throws(E) -> T
     ) async throws(E) -> T {
-        try await _withScope(isolation: isolation, { witnessValues, _ in
+        try await _withScope({ witnessValues, _ in
             modify(&witnessValues)
         }, operation: operation)
     }
@@ -301,19 +299,18 @@ extension Witness.Context {
     /// Executes an async closure with modified witness values and mode.
     ///
     /// - Parameters:
-    ///   - isolation: The actor isolation context for the operation.
     ///   - mode: The execution mode for the scope.
     ///   - modify: A closure that modifies the witness values for the scope.
     ///   - operation: The async operation to execute with the modified values.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
+    nonisolated(nonsending)
     public static func with<T, E: Error>(
-        isolation: isolated (any Actor)? = #isolation,
         mode: Mode,
         _ modify: ((inout Witness.Values) -> Void)? = nil,
-        operation: () async throws(E) -> T
+        operation: nonisolated(nonsending) () async throws(E) -> T
     ) async throws(E) -> T {
-        try await _withScope(isolation: isolation, mode: mode, { witnessValues, _ in
+        try await _withScope(mode: mode, { witnessValues, _ in
             modify?(&witnessValues)
         }, operation: operation)
     }

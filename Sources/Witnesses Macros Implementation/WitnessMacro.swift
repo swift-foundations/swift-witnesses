@@ -117,9 +117,6 @@ extension WitnessMacro: MemberMacro {
 
         // Compute shared values once
         let isPublic = structDecl.modifiers.contains { $0.name.tokenKind == .keyword(.public) }
-        let isSafe = structDecl.attributes.contains { attr in
-            attr.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "safe"
-        }
         let inlinable = canInline(from: structDecl)
         let structName = structDecl.name.text
         let nonClosureProperties = extractNonClosureProperties(from: structDecl)
@@ -143,7 +140,7 @@ extension WitnessMacro: MemberMacro {
         }
 
         // Generate Calls enum
-        members.append(contentsOf: generateCallsMembers(for: closureProperties, isSafe: isSafe))
+        members.append(contentsOf: generateCallsMembers(for: closureProperties))
 
         // Typealias for use in nested types (Observe) where bare struct name may not resolve
         if isPublic {
@@ -155,7 +152,7 @@ extension WitnessMacro: MemberMacro {
         }
 
         // Generate Observe accessor struct and property
-        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic, inlinable: inlinable, isSafe: isSafe))
+        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic, inlinable: inlinable))
         members.append(generateObserveProperty())
 
         // Generate unimplemented() as a member (not extension) for correct name resolution
@@ -879,16 +876,15 @@ private func generateMethodSignature(name: String, functionType: FunctionTypeSyn
 
 // MARK: - Calls Enum Generation
 
-private func generateCallsMembers(for properties: [ClosureProperty], isSafe: Bool = false) -> [DeclSyntax] {
+private func generateCallsMembers(for properties: [ClosureProperty]) -> [DeclSyntax] {
     let actionCases = generateCallsCases(for: properties)
     let caseEnum = generateCaseEnum(for: properties)
     let caseProperty = generateCallsCaseProperty(for: properties)
-    let resultEnum = generateResultEnum(for: properties, isSafe: isSafe)
+    let resultEnum = generateResultEnum(for: properties)
     let prismProperties = generatePrismProperties(for: properties)
 
-    let safeAttr = isSafe ? "@safe " : ""
     let callsEnum: DeclSyntax = """
-        \(raw: safeAttr)public enum Calls: Sendable {
+        public enum Calls: Sendable {
             \(raw: actionCases)
 
             /// The enumerable case discriminant (without associated values).
@@ -1022,13 +1018,12 @@ private func generateCallsCaseProperty(for properties: [ClosureProperty]) -> Str
 }
 
 /// Generates the Result enum with Standard_Library_Extensions.Result<Success, Failure> per action.
-private func generateResultEnum(for properties: [ClosureProperty], isSafe: Bool = false) -> String {
+private func generateResultEnum(for properties: [ClosureProperty]) -> String {
     let cases = properties.map { property in
         generateTypedResultCase(for: property)
     }.joined(separator: "\n                ")
-    let safeAttr = isSafe ? "@safe " : ""
     return """
-    \(safeAttr)public enum Result: ~Copyable {
+    public enum Result: ~Copyable {
                 \(cases)
             }
     """
@@ -1174,19 +1169,19 @@ private func buildOperationSignature(for property: ClosureProperty) -> String {
 
 // MARK: - Observe Accessor Generation
 
-private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String, isPublic: Bool, inlinable: Bool = true, isSafe: Bool = false) -> DeclSyntax {
+private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String, isPublic: Bool, inlinable: Bool = true) -> DeclSyntax {
     // Non-closure property pass-through from witness
     let nonClosurePassthrough = nonClosureProperties.map { "\($0.name): witness.\($0.name)" }
 
     // Generate observe closures for each variant
     let bothClosures = properties.map {
-        generateObserveClosure(for: $0, variant: .both, isPublic: isPublic, isSafe: isSafe)
+        generateObserveClosure(for: $0, variant: .both, isPublic: isPublic)
     }
     let beforeClosures = properties.map {
-        generateObserveClosure(for: $0, variant: .before, isPublic: isPublic, isSafe: isSafe)
+        generateObserveClosure(for: $0, variant: .before, isPublic: isPublic)
     }
     let afterClosures = properties.map {
-        generateObserveClosure(for: $0, variant: .after, isPublic: isPublic, isSafe: isSafe)
+        generateObserveClosure(for: $0, variant: .after, isPublic: isPublic)
     }
 
     let bothInitArgs = (nonClosurePassthrough + bothClosures).joined(separator: ",\n                    ")
@@ -1249,8 +1244,7 @@ private enum ObserveVariant {
 private func generateObserveClosure(
     for property: ClosureProperty,
     variant: ObserveVariant,
-    isPublic: Bool,
-    isSafe: Bool = false
+    isPublic: Bool
 ) -> String {
     let initLabel = property.initLabel(isPublic: isPublic)
     let closureParams = property.closureParameterList(named: true)
@@ -1265,8 +1259,7 @@ private func generateObserveClosure(
         let innerBody = generateObserveBody(
             for: property,
             variant: variant,
-            callExpression: "_original(\(callArgs))",
-            isSafe: isSafe
+            callExpression: "_original(\(callArgs))"
         )
         // Use the unwrapped originalType (includes @Sendable) for the .map return annotation.
         // originalType is e.g. `(@Sendable () -> Void)?`, wrappedType is `(@Sendable () -> Void)`.
@@ -1284,8 +1277,7 @@ private func generateObserveClosure(
     let body = generateObserveBody(
         for: property,
         variant: variant,
-        callExpression: "witness.\(property.name)(\(callArgs))",
-        isSafe: isSafe
+        callExpression: "witness.\(property.name)(\(callArgs))"
     )
 
     return """
@@ -1300,14 +1292,12 @@ private func generateObserveClosure(
 private func generateObserveBody(
     for property: ClosureProperty,
     variant: ObserveVariant,
-    callExpression: String,
-    isSafe: Bool = false
+    callExpression: String
 ) -> String {
     let actionConstruction = formatCallsConstruction(for: property)
     let returnType = property.returnType.trimmedDescription
     let hasReturn = !property.returnsVoid
     let errorType = property.throwsType?.trimmedDescription ?? "Never"
-    let unsafePrefix = isSafe ? "unsafe " : ""
     let witnessResultType = "Standard_Library_Extensions.Result<\(returnType), \(errorType)>"
 
     let beforeCall: String
@@ -1333,7 +1323,7 @@ private func generateObserveBody(
         let returnKeyword = hasReturn ? "return " : ""
         return """
                         \(beforeCall)(\(actionConstruction))
-                        \(returnKeyword)\(property.tryPrefix)\(unsafePrefix)\(property.awaitPrefix)\(callExpression)
+                        \(returnKeyword)\(property.tryPrefix)\(property.awaitPrefix)\(callExpression)
         """
 
     case .after where property.isThrowing, .both where property.isThrowing:
@@ -1361,7 +1351,7 @@ private func generateObserveBody(
         return """
                         let action: Calls = \(actionConstruction)
                         \(beforeLine)do throws(\(doThrowsType)) {
-                            \(hasReturn ? "let result = " : "")try \(unsafePrefix)\(property.awaitPrefix)\(callExpression)
+                            \(hasReturn ? "let result = " : "")try \(property.awaitPrefix)\(callExpression)
                             \(successBody)
                         } catch {
                             let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).failure(error)"))
@@ -1393,7 +1383,7 @@ private func generateObserveBody(
         }
         return """
                         let action: Calls = \(actionConstruction)
-                        \(beforeLine)\(hasReturn ? "let result = " : "")\(unsafePrefix)\(property.awaitPrefix)\(callExpression)
+                        \(beforeLine)\(hasReturn ? "let result = " : "")\(property.awaitPrefix)\(callExpression)
                         \(resultBody)
         """
     }

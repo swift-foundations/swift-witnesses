@@ -507,6 +507,33 @@ struct ClosureProperty {
     /// Whether the closure property is optional (e.g., `(@Sendable () -> Void)?`).
     let isOptional: Bool
 
+    /// Whether the original type annotation includes `@concurrent`.
+    ///
+    /// Under NonisolatedNonsendingByDefault (SE-0461), `@Sendable async` closure
+    /// literals default to `@concurrent`. When the stored property type is
+    /// `nonisolated(nonsending)` (no `@concurrent`), generated observe closures
+    /// must carry explicit `nonisolated(nonsending)` on the closure literal to
+    /// match the init parameter type.
+    var isConcurrent: Bool {
+        guard let attributed = originalType.as(AttributedTypeSyntax.self) else { return false }
+        return attributed.attributes.contains { attr in
+            attr.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "concurrent"
+        }
+    }
+
+    /// Whether generated closure literals need explicit `nonisolated(nonsending)`.
+    ///
+    /// True when the property is async, `@Sendable`, and NOT `@concurrent`.
+    /// In this case, the compiler infers `@Sendable async` closure literals as
+    /// `@concurrent`, but the init parameter type expects `nonisolated(nonsending)`.
+    var needsNonsendingAnnotation: Bool {
+        guard isAsync, !isConcurrent else { return false }
+        guard let attributed = originalType.as(AttributedTypeSyntax.self) else { return false }
+        return attributed.attributes.contains { attr in
+            attr.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "Sendable"
+        }
+    }
+
     /// The public method name: strips leading `_` from `name`.
     var methodName: String {
         if name.hasPrefix("_") {
@@ -1272,6 +1299,14 @@ private func generateObserveClosure(
                         }
                     }
         """
+    }
+
+    // Under SE-0461, @Sendable async closure literals default to @concurrent.
+    // When the stored property type is nonisolated(nonsending) (no @concurrent),
+    // we cannot create a wrapper closure literal — it would be inferred as
+    // @concurrent and fail to convert. Pass the value through unchanged.
+    if property.needsNonsendingAnnotation {
+        return "\(initLabel): witness.\(property.name)"
     }
 
     let body = generateObserveBody(

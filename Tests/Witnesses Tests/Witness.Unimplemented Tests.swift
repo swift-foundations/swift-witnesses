@@ -148,11 +148,9 @@ extension Witness.Unimplemented.Test.Unit {
     }
 
     @Test
-    func `Noncopyable driver Calls.Result carries actual return types`() throws {
-        // With the heuristic eliminated, NoncopyableHandle appears in Calls.Result
-        // instead of being replaced with Void. Verify by constructing outcomes.
+    func `Noncopyable driver Result carries actual return types`() throws {
         let handle = NoncopyableHandle(fd: 42)
-        let result = NoncopyableDriverAPI.Calls.Result.create(
+        let result = NoncopyableDriverAPI.Result.create(
             Standard_Library_Extensions.Result<NoncopyableHandle, Witness.Unimplemented.Error>.success(handle)
         )
         switch consume result {
@@ -338,6 +336,100 @@ extension Witness.Unimplemented.Test.Unit {
         #expect(throws: Witness.Unimplemented.Error.self) {
             try api.open()
         }
+    }
+}
+
+// MARK: - Nonisolated Nonsending Tests
+
+extension Witness.Unimplemented.Test.Unit {
+    @Test
+    func `Nonsending witness unimplemented compiles and throws`() async throws {
+        let api = NonsendingAPI.unimplemented()
+
+        await #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try await api.run(id: 1)
+        }
+
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            _ = try api.sync()
+        }
+    }
+
+    @Test
+    func `Nonsending witness direct construction and invocation`() async throws {
+        let api = NonsendingAPI(
+            run: { id in "result-\(id)" },
+            shutdown: {},
+            sync: { 42 }
+        )
+
+        let result = try await api.run(id: 5)
+        #expect(result == "result-5")
+
+        let syncResult = try api.sync()
+        #expect(syncResult == 42)
+    }
+
+    @Test
+    func `Nonsending witness observe before passes through nonsending closures`() async throws {
+        let log = Synchronization.Mutex<[String]>([])
+        let base = NonsendingAPI(
+            run: { id in "result-\(id)" },
+            shutdown: {},
+            sync: { 42 }
+        )
+        let observed = base.observe.before { action in
+            log.withLock { $0.append("before:\(action.case)") }
+        }
+
+        // Nonsending closures are passed through (no wrapper), so observation
+        // is skipped for run/shutdown. sync is observed normally.
+        let syncResult = try observed.sync()
+        #expect(syncResult == 42)
+
+        let entries = log.withLock { $0 }
+        #expect(entries == ["before:sync"])
+    }
+
+    @Test
+    func `Optional nonsending closure unimplemented produces nil`() {
+        let api = OptionalNonsendingAPI.unimplemented()
+        #expect(api.onComplete == nil)
+
+        #expect(throws: Witness.Unimplemented.Error.self) {
+            try api.onEvent(name: "test")
+        }
+    }
+
+    @Test
+    func `Optional nonsending closure can be set and invoked`() async {
+        var api = OptionalNonsendingAPI.unimplemented()
+        let called = Synchronization.Mutex(false)
+        api.onComplete = { called.withLock { $0 = true } }
+        await api.onComplete?()
+        #expect(called.withLock { $0 })
+    }
+
+    @Test
+    func `Optional nonsending observe passes through`() async {
+        let log = Synchronization.Mutex<[String]>([])
+        let completeCalled = Synchronization.Mutex(false)
+        let base = OptionalNonsendingAPI(
+            onEvent: { _ in },
+            onComplete: { completeCalled.withLock { $0 = true } }
+        )
+        let observed = base.observe.before { action in
+            log.withLock { $0.append("before:\(action.case)") }
+        }
+
+        // onComplete is nonisolated(nonsending) optional — passed through unchanged
+        await observed.onComplete?()
+        #expect(completeCalled.withLock { $0 })
+
+        // onEvent is a regular @Sendable closure — observation works
+        try! observed.onEvent(name: "test")
+        let entries = log.withLock { $0 }
+        #expect(entries == ["before:onEvent"])
     }
 }
 

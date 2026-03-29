@@ -521,16 +521,18 @@ struct ClosureProperty {
         }
     }
 
-    /// Whether generated closure literals need explicit `nonisolated(nonsending)`.
+    /// Whether the original type explicitly specifies `nonisolated(nonsending)`.
     ///
-    /// True when the property is async, `@Sendable`, and NOT `@concurrent`.
-    /// In this case, the compiler infers `@Sendable async` closure literals as
-    /// `@concurrent`, but the init parameter type expects `nonisolated(nonsending)`.
+    /// Under SE-0461, `@Sendable async` closure literals default to `@concurrent`.
+    /// When the stored property type explicitly includes `nonisolated(nonsending)`,
+    /// generated wrapper closures would be inferred as `@concurrent` and fail to
+    /// convert. Only triggers for explicit `nonisolated(nonsending)` — standard
+    /// `@Sendable async` closures (implicitly `@concurrent`) are handled normally.
     var needsNonsendingAnnotation: Bool {
-        guard isAsync, !isConcurrent else { return false }
+        guard isAsync else { return false }
         guard let attributed = originalType.as(AttributedTypeSyntax.self) else { return false }
         return attributed.attributes.contains { attr in
-            attr.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "Sendable"
+            attr.trimmedDescription.hasPrefix("nonisolated")
         }
     }
 
@@ -1283,6 +1285,27 @@ private func generateObserveClosure(
     // The inner closure calls _original instead of witness.propertyName.
     // Explicit return type on .map closure resolves "ambiguous without type annotation" in _Witness(...) init.
     if property.isOptional {
+        // Under SE-0461, the inner closure literal in .map would be inferred as
+        // @concurrent for async @Sendable closures. Check the unwrapped type —
+        // needsNonsendingAnnotation doesn't see through OptionalTypeSyntax.
+        if property.isAsync,
+           let optionalWrapped = property.originalType.as(OptionalTypeSyntax.self)?.wrappedType {
+            // Unwrap through parenthesized types: (nonisolated(nonsending) @Sendable () async -> Void)?
+            // wrappedType is TupleTypeSyntax with one element for parenthesized function types
+            let innerType: TypeSyntax
+            if let tuple = optionalWrapped.as(TupleTypeSyntax.self),
+               tuple.elements.count == 1,
+               let single = tuple.elements.first {
+                innerType = single.type
+            } else {
+                innerType = optionalWrapped
+            }
+            if let attributed = innerType.as(AttributedTypeSyntax.self),
+               !attributed.attributes.contains(where: { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "concurrent" }),
+               attributed.attributes.contains(where: { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "Sendable" }) {
+                return "\(initLabel): witness.\(property.name)"
+            }
+        }
         let innerBody = generateObserveBody(
             for: property,
             variant: variant,

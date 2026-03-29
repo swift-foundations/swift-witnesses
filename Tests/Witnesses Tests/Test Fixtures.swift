@@ -148,6 +148,28 @@ struct OptionalCallbackAPI: Sendable {
     var onClose: (@Sendable () -> Void)?
 }
 
+// MARK: - Nonisolated Nonsending Fixture
+
+/// Witness with nonisolated(nonsending) @Sendable async closures.
+///
+/// Under SE-0461, @Sendable async closure literals default to @concurrent.
+/// This fixture verifies that the @Witness macro correctly handles
+/// nonisolated(nonsending) closure types — generating passthrough in observe,
+/// and compilable unimplemented() output.
+@Witness
+struct NonsendingAPI: Sendable {
+    var run: nonisolated(nonsending) @Sendable (_ id: Int) async throws(Witness.Unimplemented.Error) -> String
+    var shutdown: nonisolated(nonsending) @Sendable () async -> Void
+    var sync: @Sendable () throws(Witness.Unimplemented.Error) -> Int
+}
+
+/// Witness with optional nonisolated(nonsending) @Sendable async closure.
+@Witness
+struct OptionalNonsendingAPI: Sendable {
+    var onEvent: @Sendable (_ name: String) throws(Witness.Unimplemented.Error) -> Void
+    var onComplete: (nonisolated(nonsending) @Sendable () async -> Void)?
+}
+
 // MARK: - Access Level Fixture
 
 /// Witness with package property — verifies no @usableFromInline on restricted access.

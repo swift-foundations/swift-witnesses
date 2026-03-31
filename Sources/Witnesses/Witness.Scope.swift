@@ -84,8 +84,9 @@ extension Witness {
         /// - Returns: The result of the operation.
         /// - Throws: The typed error from the operation.
         @inlinable
+        nonisolated(nonsending)
         public consuming func run<R, E: Error>(
-            _ operation: () async throws(E) -> R
+            _ operation: nonisolated(nonsending) () async throws(E) -> R
         ) async throws(E) -> R {
             consumed = true
             return try await Witness.Context.with({ $0 = values }, operation: operation)

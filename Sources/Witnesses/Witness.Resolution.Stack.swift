@@ -97,10 +97,11 @@ extension Witness.Resolution {
         ///   - operation: The async operation to execute with the key on the stack.
         /// - Returns: The result of the operation, or a cycle error.
         @inlinable
+        nonisolated(nonsending)
         public static func withPushed<K: Witness.Key, T>(
             _ key: K.Type,
             mode: Witness.Context.Mode,
-            operation: () async -> Result<T, Witness.Resolution.Error>
+            operation: nonisolated(nonsending) () async -> Result<T, Witness.Resolution.Error>
         ) async -> Result<T, Witness.Resolution.Error> {
             let id = ObjectIdentifier(key)
             var stack = current

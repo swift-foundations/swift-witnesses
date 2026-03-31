@@ -73,8 +73,9 @@ extension Witness.Context {
         /// - Returns: The result of the operation.
         /// - Throws: The typed error from the operation.
         @inlinable
+        nonisolated(nonsending)
         public func yield<R, E: Error>(
-            _ operation: () async throws(E) -> R
+            _ operation: nonisolated(nonsending) () async throws(E) -> R
         ) async throws(E) -> R {
             try await Witness.Context.with(mode: mode, { $0 = values }, operation: operation)
         }

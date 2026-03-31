@@ -368,9 +368,10 @@ extension Witness.Context {
     ///   - operation: The test operation to execute.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
+    nonisolated(nonsending)
     public static func withTest<T, E: Error>(
         _ modify: ((inout Witness.Values) -> Void)? = nil,
-        operation: () async throws(E) -> T
+        operation: nonisolated(nonsending) () async throws(E) -> T
     ) async throws(E) -> T {
         try await _withScope(mode: .test, { witnessValues, _ in
             modify?(&witnessValues)
@@ -386,9 +387,10 @@ extension Witness.Context {
     ///   - operation: The preview operation to execute.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
+    nonisolated(nonsending)
     public static func withPreview<T, E: Error>(
         _ modify: ((inout Witness.Values) -> Void)? = nil,
-        operation: () async throws(E) -> T
+        operation: nonisolated(nonsending) () async throws(E) -> T
     ) async throws(E) -> T {
         try await _withScope(mode: .preview, { witnessValues, _ in
             modify?(&witnessValues)

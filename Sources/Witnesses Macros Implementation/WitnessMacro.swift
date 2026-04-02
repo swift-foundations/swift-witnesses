@@ -152,7 +152,10 @@ extension WitnessMacro: MemberMacro {
         }
 
         // Generate Observe accessor struct and property
-        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic, inlinable: inlinable))
+        let isSendable = structDecl.inheritanceClause?.inheritedTypes.contains {
+            $0.type.trimmedDescription == "Sendable"
+        } ?? false
+        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic, inlinable: inlinable, isSendable: isSendable))
         members.append(generateObserveProperty())
 
         // Generate unimplemented() as a member (not extension) for correct name resolution
@@ -1198,7 +1201,7 @@ private func buildOperationSignature(for property: ClosureProperty) -> String {
 
 // MARK: - Observe Accessor Generation
 
-private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String, isPublic: Bool, inlinable: Bool = true) -> DeclSyntax {
+private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String, isPublic: Bool, inlinable: Bool = true, isSendable: Bool = true) -> DeclSyntax {
     // Non-closure property pass-through from witness
     let nonClosurePassthrough = nonClosureProperties.map { "\($0.name): witness.\($0.name)" }
 
@@ -1221,7 +1224,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
     let inlinableAttr = inlinable ? "@inlinable\n            " : ""
 
     return """
-        public struct Observe: Sendable {
+        public struct Observe\(raw: isSendable ? ": Sendable" : "") {
             \(raw: ufiAttr)internal let witness: _Witness
 
             \(raw: ufiAttr)internal init(_ witness: _Witness) {

@@ -139,8 +139,14 @@ extension WitnessMacro: MemberMacro {
             }
         }
 
+        // Determine Sendable conformance once — mirrors the parent struct's declaration.
+        // Generated types (Calls, Observe) only adopt Sendable when the witness does.
+        let isSendable = structDecl.inheritanceClause?.inheritedTypes.contains {
+            $0.type.trimmedDescription == "Sendable"
+        } ?? false
+
         // Generate Calls enum
-        members.append(contentsOf: generateCallsMembers(for: closureProperties))
+        members.append(contentsOf: generateCallsMembers(for: closureProperties, isSendable: isSendable))
 
         // Typealias for use in nested types (Observe) where bare struct name may not resolve
         if isPublic {
@@ -152,9 +158,6 @@ extension WitnessMacro: MemberMacro {
         }
 
         // Generate Observe accessor struct and property
-        let isSendable = structDecl.inheritanceClause?.inheritedTypes.contains {
-            $0.type.trimmedDescription == "Sendable"
-        } ?? false
         members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic, inlinable: inlinable, isSendable: isSendable))
         members.append(generateObserveProperty())
 
@@ -908,7 +911,7 @@ private func generateMethodSignature(name: String, functionType: FunctionTypeSyn
 
 // MARK: - Calls Enum Generation
 
-private func generateCallsMembers(for properties: [ClosureProperty]) -> [DeclSyntax] {
+private func generateCallsMembers(for properties: [ClosureProperty], isSendable: Bool) -> [DeclSyntax] {
     let actionCases = generateCallsCases(for: properties)
     let caseEnum = generateCaseEnum(for: properties)
     let caseProperty = generateCallsCaseProperty(for: properties)
@@ -916,7 +919,7 @@ private func generateCallsMembers(for properties: [ClosureProperty]) -> [DeclSyn
     let prismProperties = generatePrismProperties(for: properties)
 
     let callsEnum: DeclSyntax = """
-        public enum Calls: Sendable {
+        public enum Calls\(raw: isSendable ? ": Sendable" : "") {
             \(raw: actionCases)
 
             /// The enumerable case discriminant (without associated values).
@@ -1232,8 +1235,8 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
             }
 
             \(raw: inlinableAttr)public func callAsFunction(
-                _ before: @escaping @Sendable (Calls) -> Void,
-                after: @escaping @Sendable (borrowing Outcome) -> Void
+                _ before: @escaping \(raw: isSendable ? "@Sendable " : "")(Calls) -> Void,
+                after: @escaping \(raw: isSendable ? "@Sendable " : "")(borrowing Outcome) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: bothInitArgs)
@@ -1241,7 +1244,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
             }
 
             \(raw: inlinableAttr)public func before(
-                _ observer: @escaping @Sendable (Calls) -> Void
+                _ observer: @escaping \(raw: isSendable ? "@Sendable " : "")(Calls) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: beforeInitArgs)
@@ -1249,7 +1252,7 @@ private func generateObserveStruct(for properties: [ClosureProperty], nonClosure
             }
 
             \(raw: inlinableAttr)public func after(
-                _ observer: @escaping @Sendable (borrowing Outcome) -> Void
+                _ observer: @escaping \(raw: isSendable ? "@Sendable " : "")(borrowing Outcome) -> Void
             ) -> _Witness {
                 _Witness(
                     \(raw: afterInitArgs)

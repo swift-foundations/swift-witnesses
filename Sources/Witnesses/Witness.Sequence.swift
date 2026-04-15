@@ -32,9 +32,23 @@ extension Witness {
     /// print(mock.fetch(id: 4))  // "third" (stays on last)
     /// ```
     ///
-    /// This is useful for testing scenarios where you need predictable,
-    /// sequential return values without writing mutable state management.
-    public final class Sequence<T: Sendable>: @unchecked Sendable {
+    /// ## Safety Invariant
+    ///
+    /// This type is `Sendable` by virtue of internal synchronization: `_index`
+    /// is protected by `Mutex<Int>`. Every `callAsFunction()` mutates the index
+    /// exclusively through `_index.withLock`. The `values` array is immutable
+    /// after init (read-only). `T: Sendable` closes the element-Sendable gap.
+    ///
+    /// ## Intended Use
+    ///
+    /// - Mock witnesses that return predictable, sequential values in tests.
+    /// - Thread-safe shared fixture across concurrent test invocations.
+    ///
+    /// ## Non-Goals
+    ///
+    /// - Not resettable. Once exhausted, stays on the last value permanently.
+    /// - Not a general-purpose iterator. For cycling use `Witness.Cycle`.
+    public final class Sequence<T: Sendable>: @unsafe @unchecked Sendable {
         @usableFromInline
         internal let values: [T]
 

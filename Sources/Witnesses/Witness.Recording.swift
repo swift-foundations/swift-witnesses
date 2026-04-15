@@ -31,19 +31,23 @@ extension Witness {
     /// #expect(recording.calls == ["Hello", "World"])
     /// ```
     ///
-    /// For witnesses with multiple parameters, use a tuple:
+    /// ## Safety Invariant
     ///
-    /// ```swift
-    /// let recording = Witness.Recording<(id: Int, name: String)>()
+    /// All mutable state (`_calls`) is guarded by `Mutex<[Args]>`. Every
+    /// `record` / `reset` / accessor routes through `_calls.withLock`.
+    /// `Args: Sendable` closes the generic element gap.
     ///
-    /// let mock = UserClient(
-    ///     update: { id, name in recording.record((id: id, name: name)) }
-    /// )
+    /// ## Intended Use
     ///
-    /// mock.update(id: 1, name: "Alice")
-    /// #expect(recording.calls.first?.id == 1)
-    /// ```
-    public final class Recording<Args: Sendable>: @unchecked Sendable {
+    /// - Capture and verify calls made to a witness in tests.
+    /// - Thread-safe recording across concurrent test invocations.
+    ///
+    /// ## Non-Goals
+    ///
+    /// - Not a general-purpose event log. For structured test events use the
+    ///   test reporter infrastructure.
+    /// - Does NOT provide change notification or observation.
+    public final class Recording<Args: Sendable>: @unsafe @unchecked Sendable {
         @usableFromInline
         internal let _calls: Mutex<[Args]>
 

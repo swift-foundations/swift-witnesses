@@ -19,12 +19,24 @@ extension Witness.Preparation {
     /// `Store` provides type-safe storage for witnesses that are prepared
     /// ahead of time, typically during app startup.
     ///
-    /// ## Design
+    /// ## Safety Invariant
     ///
-    /// - Pointer-backed internally to avoid existential overhead
-    /// - Uses ``Ownership/Shared`` for value storage (consistent with Values)
-    /// - Thread-safe via `Mutex`
-    /// - Carried via `@TaskLocal` per [API-IMPL-010]
+    /// All mutable state (`storage` dictionary) is guarded by a `Mutex`. Every
+    /// mutation path (`set`, `remove`) and every read (`get`, `withValue`) goes
+    /// through `lock.withLock`. `deinit` releases all retained boxes. The
+    /// pointer-backed storage avoids existential overhead (8 bytes vs 40 bytes
+    /// per entry) but the Mutex serialization is the Sendable invariant.
+    ///
+    /// ## Intended Use
+    ///
+    /// - Type-safe storage for witnesses prepared ahead of time (app startup).
+    /// - Carried via `@TaskLocal` per [API-IMPL-010].
+    /// - Thread-safe shared configuration across concurrent test invocations.
+    ///
+    /// ## Non-Goals
+    ///
+    /// - Not a general-purpose dictionary. Keyed by `Witness.Key` type identity only.
+    /// - Does NOT provide change notification or observation.
     ///
     /// ## Usage
     ///
@@ -34,7 +46,7 @@ extension Witness.Preparation {
     /// let fs = store.get(FileSystem.self)  // FileSystem?
     /// ```
     @safe
-    public final class Store: @unchecked Sendable {
+    public final class Store: @unsafe @unchecked Sendable {
         /// Internal storage mapping type identifiers to boxed values.
         private var storage: [ObjectIdentifier: UnsafeRawPointer]
 

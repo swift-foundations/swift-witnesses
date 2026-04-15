@@ -31,9 +31,23 @@ extension Witness {
     /// print(mock.getStatus(id: 4))  // "pending" (cycles back)
     /// ```
     ///
-    /// This is useful for testing retry logic or state machines where
-    /// you want to simulate a repeating pattern of responses.
-    public final class Cycle<T: Sendable>: @unchecked Sendable {
+    /// ## Safety Invariant
+    ///
+    /// This type is `Sendable` by virtue of internal synchronization: `_index`
+    /// is protected by `Mutex<Int>`. Every `callAsFunction()` mutates the index
+    /// exclusively through `_index.withLock`. The `values` array is immutable
+    /// after init (read-only). `T: Sendable` closes the element-Sendable gap.
+    ///
+    /// ## Intended Use
+    ///
+    /// - Mock witnesses that cycle through a repeating pattern of values in tests.
+    /// - Thread-safe shared fixture across concurrent test invocations.
+    ///
+    /// ## Non-Goals
+    ///
+    /// - Not a finite sequence. For exhaust-then-stay-on-last use `Witness.Sequence`.
+    /// - Not resettable. The cycle position is monotonically advancing.
+    public final class Cycle<T: Sendable>: @unsafe @unchecked Sendable {
         @usableFromInline
         internal let values: [T]
 

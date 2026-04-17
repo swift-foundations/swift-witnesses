@@ -254,26 +254,17 @@ extension WitnessMacro: MemberAttributeMacro {
             }
         }
 
-        // Only deprecate closures with labeled parameters; skip optional closures
-        // (they have no generated convenience method to deprecate in favor of)
-        let isOptionalClosure = typeAnnotation.type.as(OptionalTypeSyntax.self) != nil
-        if !isOptionalClosure, let functionType = extractFunctionType(from: typeAnnotation.type) {
-            let hasLabels = functionType.parameters.contains { param in
-                param.secondName != nil ||
-                (param.firstName != nil && param.firstName?.tokenKind != .wildcard)
-            }
-
-            if hasLabels {
-                let rawName = identifier.identifier.text
-                let strippedName = rawName.hasPrefix("_") ? String(rawName.dropFirst()) : rawName
-                let methodSignature = generateMethodSignature(
-                    name: strippedName,
-                    functionType: functionType
-                )
-                let attributeString = "@available(*, deprecated, message: \"Use '\(methodSignature)' instead\")"
-                attributes.append(AttributeSyntax(stringLiteral: attributeString))
-            }
-        }
+        // No deprecation attribute is emitted. The macro generates a labeled
+        // convenience method (see generateMethod) for any closure with labeled
+        // parameters, using the property's verbatim name. Storage and method
+        // coexist with distinct Swift names. Consumers may call either form.
+        //
+        // Empirical support: Experiments/witness-property-method-collision
+        //   V1 (different-label coexistence): CONFIRMED
+        //   V5 (zero-arg collision): REFUTED — zero-arg closures skip method
+        //     generation entirely (hasLabels is false), so no collision path.
+        //   V6 (@Witness with non-underscored storage): CONFIRMED — the stored
+        //     closure and the generated labeled method coexist cleanly.
 
         return attributes
     }
@@ -542,13 +533,11 @@ struct ClosureProperty {
         }
     }
 
-    /// The public method name: strips leading `_` from `name`.
-    var methodName: String {
-        if name.hasPrefix("_") {
-            return String(name.dropFirst())
-        }
-        return name
-    }
+    /// The public method name. Identical to the storage name; no stripping.
+    /// The macro does not apply underscore-prefix conventions. If a witness
+    /// wants `io.read(from:into:)` call sites, declare the storage as `read`,
+    /// not `_read`.
+    var methodName: String { name }
 
     /// The typed throws annotation string for use in closure/method signatures.
     /// e.g., "throws(Witness.Unimplemented.Error) " or "throws " or ""
@@ -569,10 +558,8 @@ struct ClosureProperty {
         return rt == "Void" || rt == "()"
     }
 
-    /// The init label: for public structs, strips leading `_`; for non-public, uses raw name.
-    func initLabel(isPublic: Bool) -> String {
-        isPublic ? methodName : name
-    }
+    /// The init label. Identical to the storage name; no stripping.
+    func initLabel(isPublic: Bool) -> String { name }
 
     /// Effect specifiers for method signatures: " async throws(E)" or " async" or "".
     /// Leading space included when non-empty.

@@ -75,15 +75,15 @@ struct TokenProvider: Witness.Key, Sendable {
 
 // MARK: - Copyable Witness Fixtures
 
-// MARK: - Driver Pattern Fixtures (let closures, _ prefix, non-closure properties)
+// MARK: - Driver Pattern Fixtures (let closures, non-closure properties)
 
-/// Witness with let closures, _ prefix, non-closure properties (IO driver pattern).
+/// Witness with let closures and non-closure properties (IO driver pattern).
 @Witness
 struct DriverPatternAPI: Sendable {
     let capabilities: Int
-    let _create: @Sendable () throws(Witness.Unimplemented.Error) -> String
-    let _operate: @Sendable (_ handle: borrowing SomeHandle, _ count: Int) throws(Witness.Unimplemented.Error) -> Void
-    let _close: @Sendable (_ handle: consuming SomeHandle) throws(Witness.Unimplemented.Error) -> Void
+    let create: @Sendable () throws(Witness.Unimplemented.Error) -> String
+    let operate: @Sendable (_ handle: borrowing SomeHandle, _ count: Int) throws(Witness.Unimplemented.Error) -> Void
+    let close: @Sendable (_ handle: consuming SomeHandle) throws(Witness.Unimplemented.Error) -> Void
 }
 
 // MARK: - ~Copyable Driver Pattern Fixture
@@ -97,10 +97,10 @@ struct NoncopyableHandle: ~Copyable, Sendable {
 /// Tests the omission pattern: borrowing/consuming/inout params are omitted from Calls.
 @Witness
 struct NoncopyableDriverAPI: Sendable {
-    let _create: @Sendable () throws(Witness.Unimplemented.Error) -> NoncopyableHandle
-    let _register: @Sendable (borrowing NoncopyableHandle, Int32) throws(Witness.Unimplemented.Error) -> Int
-    let _poll: @Sendable (borrowing NoncopyableHandle, inout [Int32]) throws(Witness.Unimplemented.Error) -> Int
-    let _close: @Sendable (consuming NoncopyableHandle) -> Void
+    let create: @Sendable () throws(Witness.Unimplemented.Error) -> NoncopyableHandle
+    let register: @Sendable (borrowing NoncopyableHandle, Int32) throws(Witness.Unimplemented.Error) -> Int
+    let poll: @Sendable (borrowing NoncopyableHandle, inout [Int32]) throws(Witness.Unimplemented.Error) -> Int
+    let close: @Sendable (consuming NoncopyableHandle) -> Void
 }
 
 // MARK: - Existing Init Fixture

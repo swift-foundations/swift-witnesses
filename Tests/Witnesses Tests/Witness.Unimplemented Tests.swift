@@ -117,10 +117,10 @@ extension Witness.Unimplemented.Test.Unit {
         let driver = NoncopyableDriverAPI.unimplemented()
 
         #expect(throws: Witness.Unimplemented.Error.self) {
-            _ = try driver._create()
+            _ = try driver.create()
         }
         #expect(throws: Witness.Unimplemented.Error.self) {
-            _ = try driver._register(NoncopyableHandle(fd: 1), 42)
+            _ = try driver.register(NoncopyableHandle(fd: 1), 42)
         }
     }
 
@@ -166,13 +166,13 @@ extension Witness.Unimplemented.Test.Unit {
         let log = Synchronization.Mutex<[String]>([])
 
         let base = NoncopyableDriverAPI(
-            _create: { NoncopyableHandle(fd: 55) },
-            _register: { handle, descriptor in Int(descriptor) },
-            _poll: { handle, buffer in
+            create: { NoncopyableHandle(fd: 55) },
+            register: { handle, descriptor in Int(descriptor) },
+            poll: { handle, buffer in
                 buffer.append(handle.fd)
                 return 1
             },
-            _close: { handle in
+            close: { handle in
                 log.withLock { $0.append("closed fd=\(handle.fd)") }
             }
         )
@@ -182,13 +182,13 @@ extension Witness.Unimplemented.Test.Unit {
             log.withLock { $0.append("after:\(outcome.action.case)") }
         }
 
-        let h = try observed._create()
+        let h = try observed.create()
         #expect(h.fd == 55)
-        let regResult = try observed._register(h, 42)
+        let regResult = try observed.register(h, 42)
         #expect(regResult == 42)
         var buffer: [Int32] = []
-        _ = try observed._poll(h, &buffer)
-        observed._close(consume h)
+        _ = try observed.poll(h, &buffer)
+        observed.close(consume h)
 
         let entries = log.withLock { $0 }
         #expect(entries.contains("after:create"))
@@ -203,15 +203,15 @@ extension Witness.Unimplemented.Test.Unit {
         let log = Synchronization.Mutex<[String]>([])
 
         let base = NoncopyableDriverAPI(
-            _create: { NoncopyableHandle(fd: 100) },
-            _register: { handle, descriptor in
+            create: { NoncopyableHandle(fd: 100) },
+            register: { handle, descriptor in
                 return Int(descriptor)
             },
-            _poll: { handle, buffer in
+            poll: { handle, buffer in
                 buffer.append(handle.fd)
                 return 1
             },
-            _close: { handle in
+            close: { handle in
                 log.withLock { $0.append("closed fd=\(handle.fd)") }
             }
         )
@@ -220,14 +220,14 @@ extension Witness.Unimplemented.Test.Unit {
             log.withLock { $0.append("before:\(action.case)") }
         }
 
-        let h = try observed._create()
+        let h = try observed.create()
         #expect(h.fd == 100)
-        let regResult = try observed._register(h, 42)
+        let regResult = try observed.register(h, 42)
         #expect(regResult == 42)
         var buffer: [Int32] = []
-        _ = try observed._poll(h, &buffer)
+        _ = try observed.poll(h, &buffer)
         #expect(buffer == [100])
-        observed._close(consume h)
+        observed.close(consume h)
 
         let entries = log.withLock { $0 }
         #expect(entries.contains("before:create"))

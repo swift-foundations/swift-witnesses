@@ -1,0 +1,58 @@
+{
+  "$schema": "https://swift-institute.org/schemas/experiments-index-v1.json",
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-04-18",
+  "title": "Experiments Index",
+  "blurb": "",
+  "scope": "swift-witnesses (swift-foundations)",
+  "experiments": [
+    {
+      "directory": "borrow-consume-extract",
+      "displayName": "borrow-consume-extract",
+      "purpose": "Validate borrow-then-consume-extract pattern for ~Copyable Outcome",
+      "date": "2026-03-04",
+      "toolchain": "Swift 6.2.4",
+      "status": "CONFIRMED",
+      "statusDetail": null,
+      "statusRaw": "CONFIRMED",
+      "supersededBy": null,
+      "crossRefs": []
+    },
+    {
+      "directory": "borrowing-observe-pattern",
+      "displayName": "borrowing-observe-pattern",
+      "purpose": "Isolate ~Escapable Outcome compiler crash; find workaround for @_lifetime(borrow)",
+      "date": "2026-03-04",
+      "toolchain": "Swift 6.2.4",
+      "status": "CONFIRMED",
+      "statusDetail": null,
+      "statusRaw": "CONFIRMED",
+      "supersededBy": null,
+      "crossRefs": []
+    },
+    {
+      "directory": "calls-result-sibling",
+      "displayName": "calls-result-sibling",
+      "purpose": "Calls/Result/Outcome sibling placement: validate that Result and Outcome as sibling types of Calls (instead of nested) cause no naming collisions with Standard_Library_Extensions.Result. 7 variants all compile and execute.",
+      "date": "2026-03-16",
+      "toolchain": "Swift 6.2.4",
+      "status": "CONFIRMED",
+      "statusDetail": null,
+      "statusRaw": "CONFIRMED",
+      "supersededBy": null,
+      "crossRefs": []
+    },
+    {
+      "directory": "witness-property-method-collision",
+      "displayName": "witness-property-method-collision",
+      "purpose": "Does the @Witness underscore convention mechanically matter? V1 (labeled coexistence), V2 (unlabeled-call resolution), V3 (self. prefix), V6 (@Witness non-underscored storage) all CONFIRMED. V4 (same-signature: property wins, no collision). V5 (zero-arg collision) REFUTED with invalid redeclaration of 'now()'. V7 added after the 2026-04-17 macro change: underscored storage still emits deprecation pointing to stripped-name method (backwards-compat preserved). Underscore is mechanically required ONLY for zero-arg closures where both property and method share the same Swift name; for labeled closures it is purely cosmetic. Macro updated to only emit deprecation for underscored storage.",
+      "date": "2026-04-17",
+      "toolchain": "Swift 6.3",
+      "status": "CONFIRMED",
+      "statusDetail": null,
+      "statusRaw": "CONFIRMED",
+      "supersededBy": null,
+      "crossRefs": []
+    }
+  ]
+}

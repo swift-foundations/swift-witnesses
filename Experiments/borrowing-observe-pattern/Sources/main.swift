@@ -219,6 +219,7 @@ func testR7c() {
 // MARK: - R9: Stored @Sendable closure taking borrowing ~Escapable
 // Hypothesis: A Sendable struct can store closure with borrowing ~Escapable param
 // Result: CONFIRMED
+// Revalidated: Swift 6.3.1 (2026-04-30) — PASSES
 
 struct ObserveStruct: Sendable {
     let observer: @Sendable (borrowing OutcomeView) -> Void

@@ -24,6 +24,7 @@
 //              property, decorate with @Witness(.mock), and build.
 //
 // Toolchain: Apple Swift 6.3
+// Revalidated: Swift 6.3.1 (2026-04-30) — PASSES
 // Platform:  macOS 26 (arm64)
 // Date:      2026-04-16
 

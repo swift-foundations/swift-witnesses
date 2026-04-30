@@ -188,6 +188,7 @@ func testObserveBody() {
 // Hypothesis: V2's Calls enum has NO DI-specific types, making it structurally
 //             identical to what @Defunctionalize would generate.
 // Result: CONFIRMED
+// Revalidated: Swift 6.3.1 (2026-04-30) — PASSES
 // ============================================================================
 
 // Simulated @Defunctionalize output for comparison

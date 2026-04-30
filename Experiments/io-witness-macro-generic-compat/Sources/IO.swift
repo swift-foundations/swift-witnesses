@@ -10,6 +10,7 @@
 // Toolchain: Swift 6.3 release
 // Platform: macOS 26 (arm64)
 // Result: PENDING — if this experiment COMPILES, the hypothesis is REFUTED
+// Revalidated: Swift 6.3.1 (2026-04-30) — STILL PRESENT
 //   in the opposite direction (the macro DOES handle generics, which would
 //   be a pleasant surprise). If it fails to compile, record the diagnostic
 //   verbatim in the Result section of EXPERIMENT.md.

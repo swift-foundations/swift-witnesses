@@ -18,6 +18,7 @@
 //   are tested as separate variants.
 //
 // Toolchain: Swift 6.3 release
+// Revalidated: Swift 6.3.1 (2026-04-30) — PASSES
 // Platform: macOS 26 (arm64)
 // Date: 2026-04-17
 //

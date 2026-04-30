@@ -14,6 +14,7 @@
 //   method+property collisions, which none of these operators synthesize.
 //
 // Toolchain: Swift 6.3 release (package declares `// swift-tools-version: 6.3`).
+// Revalidated: Swift 6.3.1 (2026-04-30) — PASSES
 // Platform: macOS 26 (arm64).
 // Date: 2026-04-16.
 //

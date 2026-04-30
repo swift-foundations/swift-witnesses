@@ -1,4 +1,5 @@
 // Status: SUPERSEDED -- borrow-then-consume-extract pattern shipped in Witness.Result + Action.Outcome. (Phase 1b stale-triage 2026-04-30)
+// Revalidated: Swift 6.3.1 (2026-04-30) — SUPERSEDED (per existing Status line; not re-run)
 // Experiment: Validate borrow-then-consume-extract pattern
 //
 // Tests the critical pattern where an observer borrows an Outcome,

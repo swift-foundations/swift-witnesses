@@ -39,14 +39,17 @@ extension Witness {
     public struct Values: Sendable {
         /// Internal storage with proper memory cleanup.
         /// Uses UnsafeRawPointer to avoid existential overhead (8 bytes vs 40 bytes per entry).
-        // WHY: Category D — structural Sendable workaround.
+        // WHY: Category D — structural Sendable workaround (SP-5) per [MEM-SAFE-024].
         // WHY: UnsafeRawPointer in the dictionary blocks structural Sendable inference.
         // WHY: No caller invariant to uphold — COW discipline at the Values layer
         // WHY: ensures each isolation domain owns its unique _Storage after first write.
+        // WHY: Encapsulation invariant per [MEM-SAFE-021] — `_Storage` is
+        // WHY: `@usableFromInline` but its raw-pointer storage is internal-only;
+        // WHY: consumers see only the type-safe `Values` surface.
         // WHEN TO REMOVE: When compiler gains structural Sendable inference through
         // WHEN TO REMOVE: UnsafeRawPointer-backed Copyable containers.
         // TRACKING: unsafe-audit-findings.md Category D; SP-5.
-        @safe @usableFromInline
+        @usableFromInline
         final class _Storage: @unchecked Sendable {
             @usableFromInline
             var dict: [ObjectIdentifier: UnsafeRawPointer]

@@ -82,9 +82,9 @@ extension Witness.EnumTest.Unit {
 
     @Test
     func `Case init from ordinal`() throws {
-        let c0 = try TestCalls.Case(__unchecked: (), ordinal: .init(0))
-        let c1 = try TestCalls.Case(__unchecked: (), ordinal: .init(1))
-        let c2 = try TestCalls.Case(__unchecked: (), ordinal: .init(2))
+        let c0 = try TestCalls.Case(_unchecked: (), ordinal: .init(0))
+        let c1 = try TestCalls.Case(_unchecked: (), ordinal: .init(1))
+        let c2 = try TestCalls.Case(_unchecked: (), ordinal: .init(2))
         #expect(c0 == .load)
         #expect(c1 == .save)
         #expect(c2 == .transform)

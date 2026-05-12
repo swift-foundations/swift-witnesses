@@ -118,7 +118,7 @@ func generateEnumPrismMembers(for cases: [EnumCase], enumName: String) -> [DeclS
             }
 
             @inlinable
-            public init(__unchecked: Void, ordinal: Ordinal_Primitives.Ordinal) {
+            public init(_unchecked: Void, ordinal: Ordinal_Primitives.Ordinal) {
                 switch ordinal.rawValue {
                 \(raw: uncheckedInitCases)
                 }

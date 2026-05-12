@@ -1016,7 +1016,7 @@ private func generateCaseEnum(for properties: [ClosureProperty]) -> String {
                 }
 
                 @inlinable
-                public init(__unchecked: Void, ordinal: Ordinal_Primitives.Ordinal) {
+                public init(_unchecked: Void, ordinal: Ordinal_Primitives.Ordinal) {
                     switch ordinal.rawValue {
                     \(initCases)
                     }

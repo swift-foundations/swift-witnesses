@@ -273,6 +273,9 @@ extension Witness.Values {
     /// Values from `other` override values in `self`.
     /// - Parameter other: The values to merge in.
     /// - Returns: A new values container with merged values.
+    // SAFETY: Operates entirely on the safe `Witness.Values` surface; the
+    // SAFETY: underlying `_Storage`'s unsafe internals are encapsulated and
+    // SAFETY: never exposed by this method.
     @safe
     public func merging(_ other: Witness.Values) -> Witness.Values {
         var result = Witness.Values()

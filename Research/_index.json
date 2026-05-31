@@ -38,17 +38,6 @@
       "statusRaw": "RECOMMENDATION",
       "tier": null,
       "scope": null
-    },
-    {
-      "file": "audit.md",
-      "displayName": "audit.md",
-      "topic": "Legacy audit findings: pre-publication (P0/P1/P2) + modularization (MOD-001–MOD-014) — 1 FAIL (MOD-011), 1 REVIEW (MOD-002)",
-      "date": "2026-04-08",
-      "status": "LEGACY",
-      "statusDetail": null,
-      "statusRaw": "LEGACY",
-      "tier": null,
-      "scope": null
     }
   ]
 }

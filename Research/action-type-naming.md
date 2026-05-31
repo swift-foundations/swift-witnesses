@@ -2,9 +2,10 @@
 
 <!--
 ---
-version: 1.0.0
-last_updated: 2026-03-16
-status: IN_PROGRESS
+version: 1.1.0
+last_updated: 2026-05-31
+status: RECOMMENDATION
+statusDetail: "Frontmatter reconciled to the Outcome's self-declared RECOMMENDATION (Keep `Action`). Triaged 2026-05-31 per [META-002]; was IN_PROGRESS."
 tier: 2
 ---
 -->

@@ -5,9 +5,9 @@ let package = Package(
     name: "calls-result-sibling",
     platforms: [.macOS(.v26)],
     dependencies: [
-        .package(path: "../../../../swift-primitives/swift-optic-primitives"),
-        .package(path: "../../../../swift-primitives/swift-finite-primitives"),
-        .package(path: "../../../../swift-primitives/swift-standard-library-extensions"),
+        .package(url: "https://github.com/swift-primitives/swift-optic-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-finite-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-standard-library-extensions.git", branch: "main"),
     ],
     targets: [
         .executableTarget(

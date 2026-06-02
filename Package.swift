@@ -28,12 +28,12 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", "602.0.0"..<"603.0.0"),
-        .package(path: "../../swift-primitives/swift-witness-primitives"),
-        .package(path: "../../swift-primitives/swift-source-primitives"),
-        .package(path: "../../swift-primitives/swift-optic-primitives"),
-        .package(path: "../../swift-primitives/swift-finite-primitives"),
-        .package(path: "../../swift-primitives/swift-ownership-primitives"),
-        .package(path: "../../swift-primitives/swift-cache-primitives"),
+        .package(url: "https://github.com/swift-primitives/swift-witness-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-source-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-optic-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-finite-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-ownership-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-cache-primitives.git", branch: "main"),
     ],
     targets: [
         .target(

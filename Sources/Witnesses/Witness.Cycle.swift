@@ -10,8 +10,8 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import Witness_Primitives
 public import Synchronization
+import Witness_Primitives
 
 extension Witness {
     /// Cycles through values forever, wrapping around when exhausted.

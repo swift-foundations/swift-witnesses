@@ -10,8 +10,8 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import Witness_Primitives
 public import Dependency_Primitives
+import Witness_Primitives
 
 extension Witness {
     /// Task-local context for witness dependency injection.
@@ -187,20 +187,23 @@ extension Witness.Context {
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
     @inlinable
-    public static func _withScope<T, E: Error>(
+    public static func _withScope<T, E: Swift.Error>(
         mode: Mode? = nil,
         _ modify: (inout Witness.Values, inout Dependency_Primitives.Dependency.Values) -> Void,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        try Dependency.Scope.with({ l1Values in
-            var context = l1Values[_ContextKey.self]
-            if let mode {
-                context.mode = mode
-                l1Values.isTestContext = (mode == .test)
-            }
-            modify(&context.values, &l1Values)
-            l1Values[_ContextKey.self] = context
-        }, operation: operation)
+        try Dependency.Scope.with(
+            { l1Values in
+                var context = l1Values[_ContextKey.self]
+                if let mode {
+                    context.mode = mode
+                    l1Values.isTestContext = (mode == .test)
+                }
+                modify(&context.values, &l1Values)
+                l1Values[_ContextKey.self] = context
+            },
+            operation: operation
+        )
     }
 
     /// Async variant of ``_withScope(mode:_:operation:)-5f2ep``.
@@ -214,20 +217,24 @@ extension Witness.Context {
     /// - Throws: The typed error from the operation.
     @inlinable
     nonisolated(nonsending)
-    public static func _withScope<T, E: Error>(
-        mode: Mode? = nil,
-        _ modify: (inout Witness.Values, inout Dependency_Primitives.Dependency.Values) -> Void,
-        operation: nonisolated(nonsending) () async throws(E) -> T
-    ) async throws(E) -> T {
-        try await Dependency.Scope.with({ l1Values in
-            var context = l1Values[_ContextKey.self]
-            if let mode {
-                context.mode = mode
-                l1Values.isTestContext = (mode == .test)
-            }
-            modify(&context.values, &l1Values)
-            l1Values[_ContextKey.self] = context
-        }, operation: operation)
+        public static func _withScope<T, E: Swift.Error>(
+            mode: Mode? = nil,
+            _ modify: (inout Witness.Values, inout Dependency_Primitives.Dependency.Values) -> Void,
+            operation: nonisolated(nonsending) () async throws(E) -> T
+        ) async throws(E) -> T
+    {
+        try await Dependency.Scope.with(
+            { l1Values in
+                var context = l1Values[_ContextKey.self]
+                if let mode {
+                    context.mode = mode
+                    l1Values.isTestContext = (mode == .test)
+                }
+                modify(&context.values, &l1Values)
+                l1Values[_ContextKey.self] = context
+            },
+            operation: operation
+        )
     }
 }
 
@@ -243,13 +250,16 @@ extension Witness.Context {
     ///   - operation: The operation to execute with the modified values.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
-    public static func with<T, E: Error>(
+    public static func with<T, E: Swift.Error>(
         _ modify: (inout Witness.Values) -> Void,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        try _withScope({ witnessValues, _ in
-            modify(&witnessValues)
-        }, operation: operation)
+        try _withScope(
+            { witnessValues, _ in
+                modify(&witnessValues)
+            },
+            operation: operation
+        )
     }
 
     /// Executes a closure with modified witness values and mode.
@@ -260,14 +270,18 @@ extension Witness.Context {
     ///   - operation: The operation to execute with the modified values.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
-    public static func with<T, E: Error>(
+    public static func with<T, E: Swift.Error>(
         mode: Mode,
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        try _withScope(mode: mode, { witnessValues, _ in
-            modify?(&witnessValues)
-        }, operation: operation)
+        try _withScope(
+            mode: mode,
+            { witnessValues, _ in
+                modify?(&witnessValues)
+            },
+            operation: operation
+        )
     }
 }
 
@@ -287,13 +301,17 @@ extension Witness.Context {
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
     nonisolated(nonsending)
-    public static func with<T, E: Error>(
-        _ modify: (inout Witness.Values) -> Void,
-        operation: nonisolated(nonsending) () async throws(E) -> T
-    ) async throws(E) -> T {
-        try await _withScope({ witnessValues, _ in
-            modify(&witnessValues)
-        }, operation: operation)
+        public static func with<T, E: Swift.Error>(
+            _ modify: (inout Witness.Values) -> Void,
+            operation: nonisolated(nonsending) () async throws(E) -> T
+        ) async throws(E) -> T
+    {
+        try await _withScope(
+            { witnessValues, _ in
+                modify(&witnessValues)
+            },
+            operation: operation
+        )
     }
 
     /// Executes an async closure with modified witness values and mode.
@@ -305,14 +323,19 @@ extension Witness.Context {
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
     nonisolated(nonsending)
-    public static func with<T, E: Error>(
-        mode: Mode,
-        _ modify: ((inout Witness.Values) -> Void)? = nil,
-        operation: nonisolated(nonsending) () async throws(E) -> T
-    ) async throws(E) -> T {
-        try await _withScope(mode: mode, { witnessValues, _ in
-            modify?(&witnessValues)
-        }, operation: operation)
+        public static func with<T, E: Swift.Error>(
+            mode: Mode,
+            _ modify: ((inout Witness.Values) -> Void)? = nil,
+            operation: nonisolated(nonsending) () async throws(E) -> T
+        ) async throws(E) -> T
+    {
+        try await _withScope(
+            mode: mode,
+            { witnessValues, _ in
+                modify?(&witnessValues)
+            },
+            operation: operation
+        )
     }
 }
 
@@ -328,13 +351,17 @@ extension Witness.Context {
     ///   - operation: The test operation to execute.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
-    public static func withTest<T, E: Error>(
+    public static func withTest<T, E: Swift.Error>(
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        try _withScope(mode: .test, { witnessValues, _ in
-            modify?(&witnessValues)
-        }, operation: operation)
+        try _withScope(
+            mode: .test,
+            { witnessValues, _ in
+                modify?(&witnessValues)
+            },
+            operation: operation
+        )
     }
 
     /// Executes a synchronous closure in preview mode.
@@ -346,13 +373,17 @@ extension Witness.Context {
     ///   - operation: The preview operation to execute.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
-    public static func withPreview<T, E: Error>(
+    public static func withPreview<T, E: Swift.Error>(
         _ modify: ((inout Witness.Values) -> Void)? = nil,
         operation: () throws(E) -> T
     ) throws(E) -> T {
-        try _withScope(mode: .preview, { witnessValues, _ in
-            modify?(&witnessValues)
-        }, operation: operation)
+        try _withScope(
+            mode: .preview,
+            { witnessValues, _ in
+                modify?(&witnessValues)
+            },
+            operation: operation
+        )
     }
 }
 
@@ -369,13 +400,18 @@ extension Witness.Context {
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
     nonisolated(nonsending)
-    public static func withTest<T, E: Error>(
-        _ modify: ((inout Witness.Values) -> Void)? = nil,
-        operation: nonisolated(nonsending) () async throws(E) -> T
-    ) async throws(E) -> T {
-        try await _withScope(mode: .test, { witnessValues, _ in
-            modify?(&witnessValues)
-        }, operation: operation)
+        public static func withTest<T, E: Swift.Error>(
+            _ modify: ((inout Witness.Values) -> Void)? = nil,
+            operation: nonisolated(nonsending) () async throws(E) -> T
+        ) async throws(E) -> T
+    {
+        try await _withScope(
+            mode: .test,
+            { witnessValues, _ in
+                modify?(&witnessValues)
+            },
+            operation: operation
+        )
     }
 
     /// Executes an async closure in preview mode.
@@ -388,12 +424,17 @@ extension Witness.Context {
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
     nonisolated(nonsending)
-    public static func withPreview<T, E: Error>(
-        _ modify: ((inout Witness.Values) -> Void)? = nil,
-        operation: nonisolated(nonsending) () async throws(E) -> T
-    ) async throws(E) -> T {
-        try await _withScope(mode: .preview, { witnessValues, _ in
-            modify?(&witnessValues)
-        }, operation: operation)
+        public static func withPreview<T, E: Swift.Error>(
+            _ modify: ((inout Witness.Values) -> Void)? = nil,
+            operation: nonisolated(nonsending) () async throws(E) -> T
+        ) async throws(E) -> T
+    {
+        try await _withScope(
+            mode: .preview,
+            { witnessValues, _ in
+                modify?(&witnessValues)
+            },
+            operation: operation
+        )
     }
 }

@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
+
 @testable import Witnesses
 
 extension Witness {
@@ -63,7 +64,7 @@ extension Witness.Test.Unit {
 
         #expect(liveResult == "Live result for 1")
         #expect(previewResult == "Live result for 1")  // previewValue defaults to liveValue
-        #expect(testResult == "Test result for 1")      // TestAPI overrides testValue
+        #expect(testResult == "Test result for 1")  // TestAPI overrides testValue
     }
 
     @Test

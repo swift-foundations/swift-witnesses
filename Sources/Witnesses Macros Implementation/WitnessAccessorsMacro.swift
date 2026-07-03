@@ -10,10 +10,10 @@
 //
 // ===----------------------------------------------------------------------===//
 
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftDiagnostics
 
 // MARK: - WitnessAccessorsMacro
 
@@ -27,22 +27,26 @@ extension WitnessAccessorsMacro: PeerMacro {
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
         in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
+    ) throws(Never) -> [DeclSyntax] {
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
-            context.diagnose(Diagnostic(
-                node: node,
-                message: WitnessAccessorsDiagnostic.requiresStruct
-            ))
+            context.diagnose(
+                Diagnostic(
+                    node: node,
+                    message: WitnessAccessorsDiagnostic.requiresStruct
+                )
+            )
             return []
         }
 
         let closureProperties = extractClosurePropertiesForAccessors(from: structDecl)
 
         guard !closureProperties.isEmpty else {
-            context.diagnose(Diagnostic(
-                node: node,
-                message: WitnessAccessorsDiagnostic.noClosureProperties
-            ))
+            context.diagnose(
+                Diagnostic(
+                    node: node,
+                    message: WitnessAccessorsDiagnostic.noClosureProperties
+                )
+            )
             return []
         }
 
@@ -94,26 +98,28 @@ private func extractClosurePropertiesForAccessors(from structDecl: StructDeclSyn
 
     for member in structDecl.memberBlock.members {
         guard let varDecl = member.decl.as(VariableDeclSyntax.self),
-              (varDecl.bindingSpecifier.tokenKind == .keyword(.var) ||
-               varDecl.bindingSpecifier.tokenKind == .keyword(.let)),
-              let binding = varDecl.bindings.first,
-              let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
-              let typeAnnotation = binding.typeAnnotation,
-              let functionType = extractFunctionTypeForAccessors(from: typeAnnotation.type) else {
+            varDecl.bindingSpecifier.tokenKind == .keyword(.var) || varDecl.bindingSpecifier.tokenKind == .keyword(.let),
+            let binding = varDecl.bindings.first,
+            let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
+            let typeAnnotation = binding.typeAnnotation,
+            let functionType = extractFunctionTypeForAccessors(from: typeAnnotation.type)
+        else {
             continue
         }
 
         let parameters = extractParametersForAccessors(from: functionType)
         let throwsType: TypeSyntax? = functionType.effectSpecifiers?.throwsClause?.type
 
-        properties.append(AccessorClosureProperty(
-            name: identifier.identifier.text,
-            parameters: parameters,
-            isAsync: functionType.effectSpecifiers?.asyncSpecifier != nil,
-            isThrowing: functionType.effectSpecifiers?.throwsClause != nil,
-            throwsType: throwsType,
-            returnType: functionType.returnClause.type
-        ))
+        properties.append(
+            AccessorClosureProperty(
+                name: identifier.identifier.text,
+                parameters: parameters,
+                isAsync: functionType.effectSpecifiers?.asyncSpecifier != nil,
+                isThrowing: functionType.effectSpecifiers?.throwsClause != nil,
+                throwsType: throwsType,
+                returnType: functionType.returnClause.type
+            )
+        )
     }
 
     return properties
@@ -130,7 +136,7 @@ private func extractFunctionTypeForAccessors(from type: TypeSyntax) -> FunctionT
 }
 
 private func extractParametersForAccessors(from functionType: FunctionTypeSyntax) -> [AccessorClosureParameter] {
-    functionType.parameters.enumerated().map { index, param in
+    functionType.parameters.map { param in
         let label: String? = {
             if let second = param.secondName?.text {
                 return second
@@ -140,8 +146,9 @@ private func extractParametersForAccessors(from functionType: FunctionTypeSyntax
             }
             return nil
         }()
-        let isInout = param.type.is(AttributedTypeSyntax.self) &&
-            param.type.as(AttributedTypeSyntax.self)?.specifiers.contains(where: {
+        let isInout =
+            param.type.is(AttributedTypeSyntax.self)
+            && param.type.as(AttributedTypeSyntax.self)?.specifiers.contains(where: {
                 $0.as(SimpleTypeSpecifierSyntax.self)?.specifier.tokenKind == .keyword(.inout)
             }) == true
 
@@ -186,11 +193,11 @@ private func generateStaticAccessor(
     let tryKeyword = property.isThrowing ? "try " : ""
 
     return """
-    @inlinable
-        \(accessModifier)static func \(property.methodName)(\(parameters))\(effectSpecifiers)\(returnClause) {
-            \(tryKeyword)\(awaitKeyword)Witness.Context.current[Self.self].\(property.name)(\(callArguments))
-        }
-    """
+        @inlinable
+            \(accessModifier)static func \(property.methodName)(\(parameters))\(effectSpecifiers)\(returnClause) {
+                \(tryKeyword)\(awaitKeyword)Witness.Context.current[Self.self].\(property.name)(\(callArguments))
+            }
+        """
 }
 
 // MARK: - Diagnostics
@@ -203,6 +210,7 @@ enum WitnessAccessorsDiagnostic: String, DiagnosticMessage {
         switch self {
         case .requiresStruct:
             return "@Witness.Accessors can only be applied to structs"
+
         case .noClosureProperties:
             return "@Witness.Accessors requires at least one closure property"
         }

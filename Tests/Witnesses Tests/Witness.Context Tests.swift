@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
+
 @testable import Witnesses
 
 extension Witness.Context {
@@ -110,6 +111,7 @@ extension Witness.Context.Test.Unit {
         case .success(let api):
             let fetchResult = try await api.fetch(id: 1)
             #expect(fetchResult == "Live result for 1")
+
         case .failure:
             Issue.record("Expected success")
         }
@@ -301,11 +303,17 @@ extension Witness.Context.Test.Performance {
     func `Scoped override overhead`() {
         // Warmup
         for _ in 0..<10 {
-            _ = Witness.Context.with { _ in } operation: { 42 }
+            _ = Witness.Context.with { _ in
+            } operation: {
+                42
+            }
         }
         // Measured
         for _ in 0..<100 {
-            _ = Witness.Context.with { _ in } operation: { 42 }
+            _ = Witness.Context.with { _ in
+            } operation: {
+                42
+            }
         }
     }
 

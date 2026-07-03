@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
+
 @testable import Witnesses
 
 @Suite("Source.Location")
@@ -56,7 +57,9 @@ extension WitnessUnimplementedLocationTests.Unit {
     @Test
     func `Location is Sendable`() async {
         let location = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
 
         await Task {
@@ -72,15 +75,19 @@ extension WitnessUnimplementedLocationTests.EdgeCase {
     @Test
     func `Location with empty fileID`() {
         let location = Source.Location(
-            fileID: "", line: 1, column: 1
+            fileID: "",
+            line: 1,
+            column: 1
         )
-        #expect(location.fileID == "")
+        #expect(location.fileID.isEmpty)
     }
 
     @Test
     func `Location with zero line`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 0, column: 1
+            fileID: "Test.swift",
+            line: 0,
+            column: 1
         )
         #expect(location.line == 0)
     }
@@ -88,7 +95,9 @@ extension WitnessUnimplementedLocationTests.EdgeCase {
     @Test
     func `Location with large line number`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: Int(UInt32.max), column: 1
+            fileID: "Test.swift",
+            line: Int(UInt32.max),
+            column: 1
         )
         #expect(location.line == Int(UInt32.max))
     }
@@ -96,7 +105,9 @@ extension WitnessUnimplementedLocationTests.EdgeCase {
     @Test
     func `Location with unicode in fileID`() {
         let location = Source.Location(
-            fileID: "测试.swift", line: 1, column: 1
+            fileID: "测试.swift",
+            line: 1,
+            column: 1
         )
         #expect(location.fileID == "测试.swift")
     }
@@ -104,7 +115,9 @@ extension WitnessUnimplementedLocationTests.EdgeCase {
     @Test
     func `Location filePath defaults to nil`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 1, column: 1
+            fileID: "Test.swift",
+            line: 1,
+            column: 1
         )
         #expect(location.filePath == nil)
     }
@@ -116,16 +129,24 @@ extension WitnessUnimplementedLocationTests.Integration {
     @Test
     func `Location equality`() {
         let loc1 = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let loc2 = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let loc3 = Source.Location(
-            fileID: "Other.swift", line: 42, column: 7
+            fileID: "Other.swift",
+            line: 42,
+            column: 7
         )
         let loc4 = Source.Location(
-            fileID: "Test.swift", line: 100, column: 7
+            fileID: "Test.swift",
+            line: 100,
+            column: 7
         )
 
         #expect(loc1 == loc2)
@@ -136,10 +157,14 @@ extension WitnessUnimplementedLocationTests.Integration {
     @Test
     func `Location hashability`() {
         let loc1 = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let loc2 = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
 
         var set: Set<Source.Location> = []
@@ -158,14 +183,18 @@ extension WitnessUnimplementedLocationTests.Performance {
         // Warmup
         for _ in 0..<100 {
             _ = Source.Location(
-                fileID: "Test.swift", line: 42, column: 7
+                fileID: "Test.swift",
+                line: 42,
+                column: 7
             )
         }
         // Measured
         for _ in 0..<1000 {
             for i in 0..<100 {
                 _ = Source.Location(
-                    fileID: "Test.swift", line: i, column: 1
+                    fileID: "Test.swift",
+                    line: i,
+                    column: 1
                 )
             }
         }

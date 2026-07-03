@@ -10,10 +10,10 @@
 //
 // ===----------------------------------------------------------------------===//
 
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftDiagnostics
 
 // MARK: - WitnessScopeMacro
 
@@ -28,7 +28,7 @@ extension WitnessScopeMacro: MemberMacro {
         providingMembersOf declaration: some DeclGroupSyntax,
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
+    ) throws(Never) -> [DeclSyntax] {
         // Generate the _capturedContext property
         return [
             """
@@ -46,7 +46,7 @@ extension WitnessScopeMacro: MemberAttributeMacro {
         attachedTo declaration: some DeclGroupSyntax,
         providingAttributesFor member: some DeclSyntaxProtocol,
         in context: some MacroExpansionContext
-    ) throws -> [AttributeSyntax] {
+    ) throws(Never) -> [AttributeSyntax] {
         // We don't add attributes to members - the context capture happens at runtime
         // through the _capturedContext property that users reference explicitly
         return []

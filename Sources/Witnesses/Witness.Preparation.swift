@@ -68,10 +68,11 @@ extension Witness.Preparation {
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
     nonisolated(nonsending)
-    public static func with<T, E: Error>(
-        _ configure: (Store) -> Void,
-        operation: nonisolated(nonsending) () async throws(E) -> T
-    ) async throws(E) -> T {
+        public static func with<T, E: Swift.Error>(
+            _ configure: (Store) -> Void,
+            operation: nonisolated(nonsending) () async throws(E) -> T
+        ) async throws(E) -> T
+    {
         let newStore = Store()
         configure(newStore)
         return try await $store.withValue(newStore) {
@@ -90,7 +91,7 @@ extension Witness.Preparation {
     ///   - operation: The operation to execute with prepared values.
     /// - Returns: The result of the operation.
     /// - Throws: The typed error from the operation.
-    public static func with<T, E: Error>(
+    public static func with<T, E: Swift.Error>(
         _ configure: (Store) -> Void,
         operation: () throws(E) -> T
     ) throws(E) -> T {

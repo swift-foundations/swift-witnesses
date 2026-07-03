@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
+
 @testable import Witnesses
 
 extension Witness.Unimplemented.Error {
@@ -29,7 +30,9 @@ extension Witness.Unimplemented.Error.Test.Unit {
     @Test
     func `Error stores witness, operation, and location`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let error = Witness.Unimplemented.Error(
             witness: "FileSystem",
@@ -47,7 +50,9 @@ extension Witness.Unimplemented.Error.Test.Unit {
     @Test
     func `Error description contains all info`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let error = Witness.Unimplemented.Error(
             witness: "FileSystem",
@@ -65,7 +70,9 @@ extension Witness.Unimplemented.Error.Test.Unit {
     @Test
     func `Error conforms to Swift.Error`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let error: any Swift.Error = Witness.Unimplemented.Error(
             witness: "Test",
@@ -79,7 +86,9 @@ extension Witness.Unimplemented.Error.Test.Unit {
     @Test
     func `Error is Sendable`() async {
         let location = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let error = Witness.Unimplemented.Error(
             witness: "FileSystem",
@@ -99,7 +108,9 @@ extension Witness.Unimplemented.Error.Test.EdgeCase {
     @Test
     func `Error with empty witness name`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 1, column: 1
+            fileID: "Test.swift",
+            line: 1,
+            column: 1
         )
         let error = Witness.Unimplemented.Error(
             witness: "",
@@ -107,14 +118,16 @@ extension Witness.Unimplemented.Error.Test.EdgeCase {
             location: location
         )
 
-        #expect(error.witness == "")
+        #expect(error.witness.isEmpty)
         #expect(error.description.contains(".test()"))
     }
 
     @Test
     func `Error with empty operation name`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 1, column: 1
+            fileID: "Test.swift",
+            line: 1,
+            column: 1
         )
         let error = Witness.Unimplemented.Error(
             witness: "Test",
@@ -122,14 +135,16 @@ extension Witness.Unimplemented.Error.Test.EdgeCase {
             location: location
         )
 
-        #expect(error.operation == "")
+        #expect(error.operation.isEmpty)
         #expect(error.description.contains("Test."))
     }
 
     @Test
     func `Error with complex operation signature`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 1, column: 1
+            fileID: "Test.swift",
+            line: 1,
+            column: 1
         )
         let error = Witness.Unimplemented.Error(
             witness: "NetworkClient",
@@ -144,7 +159,9 @@ extension Witness.Unimplemented.Error.Test.EdgeCase {
     @Test
     func `Error with unicode in names`() {
         let location = Source.Location(
-            fileID: "测试.swift", line: 1, column: 1
+            fileID: "测试.swift",
+            line: 1,
+            column: 1
         )
         let error = Witness.Unimplemented.Error(
             witness: "文件系统",
@@ -163,10 +180,14 @@ extension Witness.Unimplemented.Error.Test.Integration {
     @Test
     func `Error equality`() {
         let loc1 = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let loc2 = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
 
         let err1 = Witness.Unimplemented.Error(witness: "A", operation: "b()", location: loc1)
@@ -180,7 +201,9 @@ extension Witness.Unimplemented.Error.Test.Integration {
     @Test
     func `Error hashability`() {
         let loc = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let err1 = Witness.Unimplemented.Error(witness: "A", operation: "b()", location: loc)
         let err2 = Witness.Unimplemented.Error(witness: "A", operation: "b()", location: loc)
@@ -218,7 +241,9 @@ extension Witness.Unimplemented.Error.Test.Performance {
     @Test
     func `Error creation`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         // Warmup
         for _ in 0..<100 {
@@ -241,7 +266,9 @@ extension Witness.Unimplemented.Error.Test.Performance {
     @Test
     func `Error description generation`() {
         let location = Source.Location(
-            fileID: "Test.swift", line: 42, column: 7
+            fileID: "Test.swift",
+            line: 42,
+            column: 7
         )
         let error = Witness.Unimplemented.Error(
             witness: "FileSystem",

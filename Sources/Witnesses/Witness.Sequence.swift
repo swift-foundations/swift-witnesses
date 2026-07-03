@@ -10,8 +10,8 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import Witness_Primitives
 public import Synchronization
+import Witness_Primitives
 
 extension Witness {
     /// Returns values from a sequence in order, staying on the last value when exhausted.

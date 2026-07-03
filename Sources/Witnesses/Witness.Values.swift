@@ -10,9 +10,9 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import Witness_Primitives
-public import Ownership_Primitives
 public import Dependency_Primitives
+public import Ownership_Primitives
+import Witness_Primitives
 
 extension Witness {
     /// A container for witness values keyed by their ``Witness/Key`` type.
@@ -37,8 +37,6 @@ extension Witness {
     /// The execution mode is now part of ``Witness/Context`` rather than `Values`.
     /// Per [API-IMPL-002], mode is a state machine enum rather than a boolean.
     public struct Values: Sendable {
-        /// Internal storage with proper memory cleanup.
-        /// Uses UnsafeRawPointer to avoid existential overhead (8 bytes vs 40 bytes per entry).
         // WHY: Category D — structural Sendable workaround (SP-5) per [MEM-SAFE-024].
         // WHY: UnsafeRawPointer in the dictionary blocks structural Sendable inference.
         // WHY: No caller invariant to uphold — COW discipline at the Values layer
@@ -49,6 +47,8 @@ extension Witness {
         // WHEN TO REMOVE: When compiler gains structural Sendable inference through
         // WHEN TO REMOVE: UnsafeRawPointer-backed Copyable containers.
         // TRACKING: unsafe-audit-findings.md Category D; SP-5.
+        /// Internal storage with proper memory cleanup.
+        /// Uses UnsafeRawPointer to avoid existential overhead (8 bytes vs 40 bytes per entry).
         @usableFromInline
         final class _Storage: @unchecked Sendable {
             @usableFromInline
@@ -143,8 +143,10 @@ extension Witness.Values {
         switch mode {
         case .live:
             return K.liveValue
+
         case .preview:
             return K.previewValue
+
         case .test:
             return K.testValue
         }
@@ -268,14 +270,14 @@ extension Witness.Values {
         unsafe _storage.set(ptr, for: id)
     }
 
+    // SAFETY: Operates entirely on the safe `Witness.Values` surface; the
+    // SAFETY: underlying `_Storage`'s unsafe internals are encapsulated and
+    // SAFETY: never exposed by this method.
     /// Creates a new values container by merging another into this one.
     ///
     /// Values from `other` override values in `self`.
     /// - Parameter other: The values to merge in.
     /// - Returns: A new values container with merged values.
-    // SAFETY: Operates entirely on the safe `Witness.Values` surface; the
-    // SAFETY: underlying `_Storage`'s unsafe internals are encapsulated and
-    // SAFETY: never exposed by this method.
     @safe
     public func merging(_ other: Witness.Values) -> Witness.Values {
         var result = Witness.Values()

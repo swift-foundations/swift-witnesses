@@ -10,8 +10,8 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import Witness_Primitives
 public import Dependency_Primitives
+import Witness_Primitives
 
 // MARK: - Hoisted Protocol (Swift limitation: protocols cannot nest in protocols)
 

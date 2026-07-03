@@ -10,9 +10,9 @@
 //
 // ===----------------------------------------------------------------------===//
 
-@_exported public import Witness_Primitives
-@_exported public import Optic_Primitives
 @_exported public import Finite_Primitives
+@_exported public import Optic_Primitives
+@_exported public import Witness_Primitives
 
 // MARK: - Witness.Derive
 
@@ -59,7 +59,7 @@ extension Witness {
         /// // Usage - provide values, not closures:
         /// let api = API.mock(fetchUser: testUser)  // deleteUser defaults to ()
         /// ```
-        public static let mock = Derive(rawValue: 1 << 0)
+        public static let mock = Self(rawValue: 1 << 0)
 
         /// Generate `callAsFunction()` forwarding and `constant(_:)` static method.
         ///
@@ -78,7 +78,7 @@ extension Witness {
         /// let generator = DateGenerator.constant(Date(timeIntervalSince1970: 0))
         /// print(generator())  // 1970-01-01
         /// ```
-        public static let generator = Derive(rawValue: 1 << 1)
+        public static let generator = Self(rawValue: 1 << 1)
     }
 }
 
@@ -172,10 +172,11 @@ extension Witness {
 @attached(member, names: arbitrary)
 @attached(memberAttribute)
 @attached(extension, conformances: Witness_Primitives.__WitnessProtocol, Optic_Primitives.__OpticPrismAccessible, names: named(unimplemented), named(mock))
-public macro Witness() = #externalMacro(
-    module: "Witnesses_Macros_Implementation",
-    type: "WitnessMacro"
-)
+public macro Witness() =
+    #externalMacro(
+        module: "Witnesses_Macros_Implementation",
+        type: "WitnessMacro"
+    )
 
 /// Generates protocol witness infrastructure with additional derive modes.
 ///
@@ -205,10 +206,11 @@ public macro Witness() = #externalMacro(
 @attached(member, names: arbitrary)
 @attached(memberAttribute)
 @attached(extension, conformances: Witness_Primitives.__WitnessProtocol, Optic_Primitives.__OpticPrismAccessible, names: named(unimplemented), named(mock))
-public macro Witness(_ derive: Witness.Derive) = #externalMacro(
-    module: "Witnesses_Macros_Implementation",
-    type: "WitnessMacro"
-)
+public macro Witness(_ derive: Witness.Derive) =
+    #externalMacro(
+        module: "Witnesses_Macros_Implementation",
+        type: "WitnessMacro"
+    )
 
 // MARK: - WitnessScope
 
@@ -255,10 +257,11 @@ public macro Witness(_ derive: Witness.Derive) = #externalMacro(
 /// - Works with both sync and async methods
 @attached(member, names: named(_capturedContext))
 @attached(memberAttribute)
-public macro WitnessScope() = #externalMacro(
-    module: "Witnesses_Macros_Implementation",
-    type: "WitnessScopeMacro"
-)
+public macro WitnessScope() =
+    #externalMacro(
+        module: "Witnesses_Macros_Implementation",
+        type: "WitnessScopeMacro"
+    )
 
 // MARK: - WitnessAccessors
 
@@ -308,7 +311,8 @@ public macro WitnessScope() = #externalMacro(
 /// - The type must conform to `Witness.Key`
 /// - Must be used alongside `@Witness`
 @attached(peer, names: arbitrary)
-public macro WitnessAccessors() = #externalMacro(
-    module: "Witnesses_Macros_Implementation",
-    type: "WitnessAccessorsMacro"
-)
+public macro WitnessAccessors() =
+    #externalMacro(
+        module: "Witnesses_Macros_Implementation",
+        type: "WitnessAccessorsMacro"
+    )

@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
+
 @testable import Witnesses
 
 extension Witness.Derive {
@@ -32,7 +33,7 @@ extension Witness.Derive.Test.Unit {
         let api = MockableAPI.mock(
             fetchUser: "Test User",
             getCount: 42
-            // deleteUser defaults to () since it returns Void
+                // deleteUser defaults to () since it returns Void
         )
 
         // Values are returned regardless of input
@@ -132,7 +133,7 @@ extension Witness.Derive.Test.EdgeCase {
         )
 
         let user = try await api.fetchUser(id: 1)
-        #expect(user == "")
+        #expect(user.isEmpty)
     }
 
     @Test
@@ -179,7 +180,7 @@ extension Witness.Derive.Test.Integration {
             getCount: 42
         )
 
-        try await Witness.Context.with { values in
+        try await Witness.Context.with { _ in
             // Can't test with MockableAPI directly as it doesn't conform to Witness.Key
             // This test validates that mock instances work correctly
         } operation: {

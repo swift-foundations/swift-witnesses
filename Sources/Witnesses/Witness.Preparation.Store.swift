@@ -10,8 +10,8 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import Synchronization
 internal import Ownership_Primitives
+import Synchronization
 
 extension Witness.Preparation {
     /// Thread-safe store for prepared witness values.

@@ -11,6 +11,7 @@
 // ===----------------------------------------------------------------------===//
 
 import Testing
+
 @testable import Witnesses
 
 extension Witness.Values {
@@ -183,10 +184,13 @@ extension Witness.Values.Test.Unit {
     @Test
     func `Copyable Preparation Store get still works`() {
         let store = Witness.Preparation.Store()
-        store.set(TestAPI.self, value: TestAPI(
-            fetch: { _ in "Prepared" },
-            update: { _, _ in }
-        ))
+        store.set(
+            TestAPI.self,
+            value: TestAPI(
+                fetch: { _ in "Prepared" },
+                update: { _, _ in }
+            )
+        )
         let api = store.get(TestAPI.self)
         #expect(api != nil)
     }
@@ -194,10 +198,13 @@ extension Witness.Values.Test.Unit {
     @Test
     func `Copyable Preparation Store remove still works`() {
         let store = Witness.Preparation.Store()
-        store.set(TestAPI.self, value: TestAPI(
-            fetch: { _ in "Prepared" },
-            update: { _, _ in }
-        ))
+        store.set(
+            TestAPI.self,
+            value: TestAPI(
+                fetch: { _ in "Prepared" },
+                update: { _, _ in }
+            )
+        )
         let removed = store.remove(TestAPI.self)
         #expect(removed != nil)
         #expect(store.get(TestAPI.self) == nil)
@@ -291,7 +298,7 @@ extension Witness.Values.Test.EdgeCase {
     func `withValue works with Copyable values too`() {
         let values = Witness.Values()
 
-        let result = values.withValue(for: TestAPI.self, mode: .live) { api in
+        let result = values.withValue(for: TestAPI.self, mode: .live) { _ in
             true
         }
         #expect(result == true)

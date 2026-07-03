@@ -124,7 +124,7 @@ struct IntGenerator: Sendable {
 
 // MARK: - Foreign Error Type Fixture
 
-enum CustomError: Error, Sendable { case failed }
+enum CustomError: Swift.Error, Sendable { case failed }
 
 // MARK: - Nested Type Fixture
 
@@ -140,6 +140,7 @@ enum APINamespace {
 // WORKAROUND: Compound fixture names
 // WHY: All existing fixtures use compound names; changing one creates inconsistency
 // WHEN TO REMOVE: When all test fixtures are refactored to Nest.Name
+// TRACKING: No dedicated issue filed yet; revisit alongside a future [API-NAME-002] fixture-naming sweep.
 
 /// Witness with optional closure (e.g., IO.Completion.Wakeup.Channel pattern).
 @Witness

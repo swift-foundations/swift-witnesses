@@ -37,7 +37,7 @@ extension Witness.Resolution {
     public struct Stack: Sendable {
         /// TaskLocal storage for the current resolution stack.
         @TaskLocal
-        public static var current: Stack = Stack()
+        public static var current: Stack = Self()
 
         /// The key identifiers currently being resolved.
         @usableFromInline
@@ -98,11 +98,12 @@ extension Witness.Resolution {
         /// - Returns: The result of the operation, or a cycle error.
         @inlinable
         nonisolated(nonsending)
-        public static func withPushed<K: Witness.Key, T>(
-            _ key: K.Type,
-            mode: Witness.Context.Mode,
-            operation: nonisolated(nonsending) () async -> Result<T, Witness.Resolution.Error>
-        ) async -> Result<T, Witness.Resolution.Error> {
+            public static func withPushed<K: Witness.Key, T>(
+                _ key: K.Type,
+                mode: Witness.Context.Mode,
+                operation: nonisolated(nonsending) () async -> Result<T, Witness.Resolution.Error>
+            ) async -> Result<T, Witness.Resolution.Error>
+        {
             let id = ObjectIdentifier(key)
             var stack = current
 

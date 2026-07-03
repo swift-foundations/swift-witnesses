@@ -59,7 +59,7 @@ extension Witness {
         /// - Returns: The result of the operation.
         /// - Throws: The typed error from the operation.
         @inlinable
-        public func withValues<R, E: Error>(
+        public func withValues<R, E: Swift.Error>(
             _ operation: () throws(E) -> R
         ) throws(E) -> R {
             try Witness.Context.with({ $0 = self.values }, operation: operation)
@@ -72,9 +72,10 @@ extension Witness {
         /// - Throws: The typed error from the operation.
         @inlinable
         nonisolated(nonsending)
-        public func withValues<R, E: Error>(
-            _ operation: nonisolated(nonsending) () async throws(E) -> R
-        ) async throws(E) -> R {
+            public func withValues<R, E: Swift.Error>(
+                _ operation: nonisolated(nonsending) () async throws(E) -> R
+            ) async throws(E) -> R
+        {
             try await Witness.Context.with({ $0 = self.values }, operation: operation)
         }
     }

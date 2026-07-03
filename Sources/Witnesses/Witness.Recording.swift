@@ -10,8 +10,8 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import Witness_Primitives
 public import Synchronization
+import Witness_Primitives
 
 extension Witness {
     /// Records all calls for later inspection.

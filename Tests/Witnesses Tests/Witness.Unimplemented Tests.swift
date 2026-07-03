@@ -10,8 +10,9 @@
 //
 // ===----------------------------------------------------------------------===//
 
-import Testing
 import Synchronization
+import Testing
+
 @testable import Witnesses
 
 extension Witness.Unimplemented {
@@ -156,6 +157,7 @@ extension Witness.Unimplemented.Test.Unit {
         switch consume result {
         case .create(.success(let h)):
             #expect(h.fd == 42)
+
         default:
             Issue.record("Expected .create(.success)")
         }
@@ -167,7 +169,7 @@ extension Witness.Unimplemented.Test.Unit {
 
         let base = NoncopyableDriverAPI(
             create: { NoncopyableHandle(fd: 55) },
-            register: { handle, descriptor in Int(descriptor) },
+            register: { _, descriptor in Int(descriptor) },
             poll: { handle, buffer in
                 buffer.append(handle.fd)
                 return 1
@@ -204,7 +206,7 @@ extension Witness.Unimplemented.Test.Unit {
 
         let base = NoncopyableDriverAPI(
             create: { NoncopyableHandle(fd: 100) },
-            register: { handle, descriptor in
+            register: { _, descriptor in
                 return Int(descriptor)
             },
             poll: { handle, buffer in
@@ -270,7 +272,7 @@ extension Witness.Unimplemented.Test.Unit {
     }
 
     @Test
-    func `Optional closure observe before passes nil through`() {
+    func `Optional closure observe before passes nil through`() throws(Witness.Unimplemented.Error) {
         let log = Synchronization.Mutex<[String]>([])
         let base = OptionalCallbackAPI(
             onEvent: { _ in },
@@ -283,7 +285,7 @@ extension Witness.Unimplemented.Test.Unit {
         #expect(observed.onClose == nil)
 
         // onEvent triggers observer
-        try! observed.onEvent(name: "test")
+        try observed.onEvent(name: "test")
         let entries = log.withLock { $0 }
         #expect(entries == ["before:onEvent"])
     }
@@ -411,7 +413,7 @@ extension Witness.Unimplemented.Test.Unit {
     }
 
     @Test
-    func `Optional nonsending observe passes through`() async {
+    func `Optional nonsending observe passes through`() async throws(Witness.Unimplemented.Error) {
         let log = Synchronization.Mutex<[String]>([])
         let completeCalled = Synchronization.Mutex(false)
         let base = OptionalNonsendingAPI(
@@ -427,7 +429,7 @@ extension Witness.Unimplemented.Test.Unit {
         #expect(completeCalled.withLock { $0 })
 
         // onEvent is a regular @Sendable closure — observation works
-        try! observed.onEvent(name: "test")
+        try observed.onEvent(name: "test")
         let entries = log.withLock { $0 }
         #expect(entries == ["before:onEvent"])
     }

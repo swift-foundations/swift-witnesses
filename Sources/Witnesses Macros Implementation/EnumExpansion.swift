@@ -10,31 +10,21 @@
 //
 // ===----------------------------------------------------------------------===//
 
+import SwiftDiagnostics
 @_spi(RawSyntax) import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftDiagnostics
 
 // MARK: - Enum Case Extraction
 
 struct EnumCase: Sendable {
     let name: String
     let parameters: [EnumCaseParameter]
-
-    init(name: String, parameters: [EnumCaseParameter]) {
-        self.name = name
-        self.parameters = parameters
-    }
 }
 
 struct EnumCaseParameter: Sendable {
     let label: String?
     let type: String
-
-    init(label: String?, type: String) {
-        self.label = label
-        self.type = type
-    }
 }
 
 func extractEnumCases(from enumDecl: EnumDeclSyntax) -> [EnumCase] {
@@ -52,10 +42,12 @@ func extractEnumCases(from enumDecl: EnumDeclSyntax) -> [EnumCase] {
             if let parameterClause = element.parameterClause {
                 for param in parameterClause.parameters {
                     let label = param.firstName?.text
-                    parameters.append(EnumCaseParameter(
-                        label: label,
-                        type: param.type.trimmedDescription
-                    ))
+                    parameters.append(
+                        EnumCaseParameter(
+                            label: label,
+                            type: param.type.trimmedDescription
+                        )
+                    )
                 }
             }
 
@@ -272,10 +264,12 @@ private func generateEnumPrismProperty(for enumCase: EnumCase, enumName: String)
     let prismCase = PrismCase(
         caseName: escapeIdentifier(enumCase.name),
         rootTypeName: enumName,
-        parameters: enumCase.parameters.map { (
-            $0.label.map { escapeIdentifier($0) },
-            $0.type
-        )}
+        parameters: enumCase.parameters.map {
+            (
+                $0.label.map { escapeIdentifier($0) },
+                $0.type
+            )
+        }
     )
     return generatePrism(for: prismCase)
 }
@@ -296,13 +290,13 @@ func generatePrism(for prismCase: PrismCase) -> String {
 
     if prismCase.parameters.isEmpty {
         return """
-        public var \(name): Optic_Primitives.Optic.Prism<\(root), Void> {
-                    Optic_Primitives.Optic.Prism(
-                        embed: { _ in .\(name) },
-                        extract: { if case .\(name) = $0 { return () } else { return nil } }
-                    )
-                }
-        """
+            public var \(name): Optic_Primitives.Optic.Prism<\(root), Void> {
+                        Optic_Primitives.Optic.Prism(
+                            embed: { _ in .\(name) },
+                            extract: { if case .\(name) = $0 { return () } else { return nil } }
+                        )
+                    }
+            """
     } else if prismCase.parameters.count == 1 {
         let param = prismCase.parameters[0]
         let paramType = param.type
@@ -310,13 +304,13 @@ func generatePrism(for prismCase: PrismCase) -> String {
         let extractPattern = param.label != nil ? "\(param.label!): let v" : "let v"
 
         return """
-        public var \(name): Optic_Primitives.Optic.Prism<\(root), \(paramType)> {
-                    Optic_Primitives.Optic.Prism(
-                        embed: { .\(name)(\(embedArg)) },
-                        extract: { if case .\(name)(\(extractPattern)) = $0 { return v } else { return nil } }
-                    )
-                }
-        """
+            public var \(name): Optic_Primitives.Optic.Prism<\(root), \(paramType)> {
+                        Optic_Primitives.Optic.Prism(
+                            embed: { .\(name)(\(embedArg)) },
+                            extract: { if case .\(name)(\(extractPattern)) = $0 { return v } else { return nil } }
+                        )
+                    }
+            """
     } else {
         let tupleTypes = prismCase.parameters.map { p in
             p.label != nil ? "\(p.label!): \(p.type)" : p.type
@@ -335,13 +329,13 @@ func generatePrism(for prismCase: PrismCase) -> String {
         }.joined(separator: ", ")
 
         return """
-        public var \(name): Optic_Primitives.Optic.Prism<\(root), (\(tupleTypes))> {
-                    Optic_Primitives.Optic.Prism(
-                        embed: { .\(name)(\(embedArgs)) },
-                        extract: { if case .\(name)(\(extractPatterns)) = $0 { return (\(extractTuple)) } else { return nil } }
-                    )
-                }
-        """
+            public var \(name): Optic_Primitives.Optic.Prism<\(root), (\(tupleTypes))> {
+                        Optic_Primitives.Optic.Prism(
+                            embed: { .\(name)(\(embedArgs)) },
+                            extract: { if case .\(name)(\(extractPatterns)) = $0 { return (\(extractTuple)) } else { return nil } }
+                        )
+                    }
+            """
     }
 }
 

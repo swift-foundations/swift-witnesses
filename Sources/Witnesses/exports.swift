@@ -10,5 +10,5 @@
 //
 // ===----------------------------------------------------------------------===//
 
-@_exported public import Witnesses_Macros
 @_exported public import Source_Primitives
+@_exported public import Witnesses_Macros

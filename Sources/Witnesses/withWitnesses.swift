@@ -33,7 +33,7 @@ import Witness_Primitives
 /// - Returns: The result of the operation.
 /// - Throws: The typed error from the operation.
 @inlinable
-public func withWitnesses<T, E: Error>(
+public func withWitnesses<T, E: Swift.Error>(
     _ modify: (inout Witness.Values) -> Void,
     operation: () throws(E) -> T
 ) throws(E) -> T {
@@ -62,9 +62,10 @@ public func withWitnesses<T, E: Error>(
 /// - Throws: The typed error from the operation.
 @inlinable
 nonisolated(nonsending)
-public func withWitnesses<T, E: Error>(
-    _ modify: (inout Witness.Values) -> Void,
-    operation: nonisolated(nonsending) () async throws(E) -> T
-) async throws(E) -> T {
+    public func withWitnesses<T, E: Swift.Error>(
+        _ modify: (inout Witness.Values) -> Void,
+        operation: nonisolated(nonsending) () async throws(E) -> T
+    ) async throws(E) -> T
+{
     try await Witness.Context.with(modify, operation: operation)
 }

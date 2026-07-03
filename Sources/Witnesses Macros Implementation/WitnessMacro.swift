@@ -10,10 +10,10 @@
 //
 // ===----------------------------------------------------------------------===//
 
+import SwiftDiagnostics
 @_spi(RawSyntax) import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftDiagnostics
 
 // MARK: - WitnessMacro
 
@@ -25,8 +25,8 @@ public struct WitnessMacro {}
 struct DeriveOptions: OptionSet {
     let rawValue: UInt8
 
-    static let mock = DeriveOptions(rawValue: 1 << 0)
-    static let generator = DeriveOptions(rawValue: 1 << 1)
+    static let mock = Self(rawValue: 1 << 0)
+    static let generator = Self(rawValue: 1 << 1)
 }
 
 /// Parses derive options from the @Witness attribute arguments.
@@ -37,8 +37,9 @@ struct DeriveOptions: OptionSet {
 /// - `@Witness([.mock, .spy])` → [.mock, .spy]
 private func parseDeriveOptions(from node: AttributeSyntax) -> DeriveOptions {
     guard let arguments = node.arguments,
-          case .argumentList(let argList) = arguments,
-          let firstArg = argList.first else {
+        case .argumentList(let argList) = arguments,
+        let firstArg = argList.first
+    else {
         return []
     }
 
@@ -80,7 +81,7 @@ extension WitnessMacro: MemberMacro {
         providingMembersOf declaration: some DeclGroupSyntax,
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
+    ) throws(Never) -> [DeclSyntax] {
         // Handle enum declarations
         if let enumDecl = declaration.as(EnumDeclSyntax.self) {
             return expandEnum(enumDecl: enumDecl, node: node, context: context)
@@ -88,10 +89,12 @@ extension WitnessMacro: MemberMacro {
 
         // Handle struct declarations
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
-            context.diagnose(Diagnostic(
-                node: node,
-                message: WitnessDiagnostic.requiresStructOrEnum
-            ))
+            context.diagnose(
+                Diagnostic(
+                    node: node,
+                    message: WitnessDiagnostic.requiresStructOrEnum
+                )
+            )
             return []
         }
 
@@ -106,10 +109,12 @@ extension WitnessMacro: MemberMacro {
         let closureProperties = extractClosureProperties(from: structDecl)
 
         guard !closureProperties.isEmpty else {
-            context.diagnose(Diagnostic(
-                node: node,
-                message: WitnessDiagnostic.noClosureProperties
-            ))
+            context.diagnose(
+                Diagnostic(
+                    node: node,
+                    message: WitnessDiagnostic.noClosureProperties
+                )
+            )
             return []
         }
 
@@ -125,11 +130,13 @@ extension WitnessMacro: MemberMacro {
             member.decl.is(InitializerDeclSyntax.self)
         }
         if isPublic && !hasExistingInit {
-            members.append(generatePublicInit(
-                closureProperties: closureProperties,
-                nonClosureProperties: nonClosureProperties,
-                isPublic: isPublic
-            ))
+            members.append(
+                generatePublicInit(
+                    closureProperties: closureProperties,
+                    nonClosureProperties: nonClosureProperties,
+                    isPublic: isPublic
+                )
+            )
         }
 
         // Generate methods for labeled closures (skip optional closures — consumer calls directly)
@@ -141,9 +148,10 @@ extension WitnessMacro: MemberMacro {
 
         // Determine Sendable conformance once — mirrors the parent struct's declaration.
         // Generated types (Calls, Observe) only adopt Sendable when the witness does.
-        let isSendable = structDecl.inheritanceClause?.inheritedTypes.contains {
-            $0.type.trimmedDescription == "Sendable"
-        } ?? false
+        let isSendable =
+            structDecl.inheritanceClause?.inheritedTypes.contains {
+                $0.type.trimmedDescription == "Sendable"
+            } ?? false
 
         // Generate Calls enum
         members.append(contentsOf: generateCallsMembers(for: closureProperties, isSendable: isSendable))
@@ -158,41 +166,49 @@ extension WitnessMacro: MemberMacro {
         }
 
         // Generate Observe accessor struct and property
-        members.append(generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic, inlinable: inlinable, isSendable: isSendable))
+        members.append(
+            generateObserveStruct(for: closureProperties, nonClosureProperties: nonClosureProperties, structName: structName, isPublic: isPublic, inlinable: inlinable, isSendable: isSendable)
+        )
         members.append(generateObserveProperty())
 
         // Generate unimplemented() as a member (not extension) for correct name resolution
         // in nested types where short names only resolve from the struct's parent scope
-        members.append(generateUnimplementedMember(
-            structName: structName,
-            closureProperties: closureProperties,
-            nonClosureProperties: nonClosureProperties,
-            isPublic: isPublic,
-            inlinable: inlinable
-        ))
-
-        // Generate mock() if .mock is specified
-        let deriveOptions = parseDeriveOptions(from: node)
-        if deriveOptions.contains(.mock) {
-            members.append(generateMockMember(
+        members.append(
+            generateUnimplementedMember(
                 structName: structName,
                 closureProperties: closureProperties,
                 nonClosureProperties: nonClosureProperties,
                 isPublic: isPublic,
                 inlinable: inlinable
-            ))
+            )
+        )
+
+        // Generate mock() if .mock is specified
+        let deriveOptions = parseDeriveOptions(from: node)
+        if deriveOptions.contains(.mock) {
+            members.append(
+                generateMockMember(
+                    structName: structName,
+                    closureProperties: closureProperties,
+                    nonClosureProperties: nonClosureProperties,
+                    isPublic: isPublic,
+                    inlinable: inlinable
+                )
+            )
         }
 
         // Generate callAsFunction if .generator is specified and there's exactly one closure
         if deriveOptions.contains(.generator), closureProperties.count == 1 {
             let property = closureProperties[0]
             members.append(generateCallAsFunction(for: property, inlinable: inlinable))
-            members.append(generateConstantMember(
-                structName: structName,
-                property: property,
-                isPublic: isPublic,
-                inlinable: inlinable
-            ))
+            members.append(
+                generateConstantMember(
+                    structName: structName,
+                    property: property,
+                    isPublic: isPublic,
+                    inlinable: inlinable
+                )
+            )
         }
 
         return members
@@ -206,10 +222,12 @@ extension WitnessMacro: MemberMacro {
         let enumCases = extractEnumCases(from: enumDecl)
 
         guard !enumCases.isEmpty else {
-            context.diagnose(Diagnostic(
-                node: node,
-                message: WitnessDiagnostic.noEnumCases
-            ))
+            context.diagnose(
+                Diagnostic(
+                    node: node,
+                    message: WitnessDiagnostic.noEnumCases
+                )
+            )
             return []
         }
 
@@ -226,17 +244,18 @@ extension WitnessMacro: MemberAttributeMacro {
         attachedTo declaration: some DeclGroupSyntax,
         providingAttributesFor member: some DeclSyntaxProtocol,
         in context: some MacroExpansionContext
-    ) throws -> [AttributeSyntax] {
+    ) throws(Never) -> [AttributeSyntax] {
         // No attributes for enum members
         if declaration.is(EnumDeclSyntax.self) {
             return []
         }
 
         guard let varDecl = member.as(VariableDeclSyntax.self),
-              let binding = varDecl.bindings.first,
-              binding.accessorBlock == nil,
-              let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
-              let typeAnnotation = binding.typeAnnotation else {
+            let binding = varDecl.bindings.first,
+            binding.accessorBlock == nil,
+            let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
+            let typeAnnotation = binding.typeAnnotation
+        else {
             return []
         }
 
@@ -283,10 +302,11 @@ extension WitnessMacro: ExtensionMacro {
         var extensions: [ExtensionDeclSyntax] = []
 
         // All @Witness types conform to __WitnessProtocol (skip if already declared)
-        let alreadyConformsToWitnessProtocol = declaration.inheritanceClause?.inheritedTypes.contains { inherited in
-            let text = inherited.type.trimmedDescription
-            return text == "__WitnessProtocol" || text == "Witness.`Protocol`" || text == "Witness.Protocol" || text.hasSuffix(".__WitnessProtocol")
-        } ?? false
+        let alreadyConformsToWitnessProtocol =
+            declaration.inheritanceClause?.inheritedTypes.contains { inherited in
+                let text = inherited.type.trimmedDescription
+                return text == "__WitnessProtocol" || text == "Witness.`Protocol`" || text == "Witness.Protocol" || text.hasSuffix(".__WitnessProtocol")
+            } ?? false
 
         if !alreadyConformsToWitnessProtocol {
             let witnessExt = try ExtensionDeclSyntax("extension \(type.trimmed): Witness_Primitives.__WitnessProtocol {}")
@@ -322,10 +342,7 @@ private func generateUnimplementedMember(
 
     // Check if any closure can throw Witness.Unimplemented.Error (needs Source.Location)
     let needsSourceLocation = closureProperties.contains { property in
-        property.isThrowing && (
-            property.throwsType == nil ||
-            property.throwsType?.trimmedDescription == "Witness.Unimplemented.Error"
-        )
+        property.isThrowing && (property.throwsType == nil || property.throwsType?.trimmedDescription == "Witness.Unimplemented.Error")
     }
 
     // Generate closure initializers
@@ -341,33 +358,34 @@ private func generateUnimplementedMember(
             "fileID: Swift.String = #fileID",
             "filePath: Swift.String = #filePath",
             "line: Int = #line",
-            "column: Int = #column"
+            "column: Int = #column",
         ]
     }
     let allParams = paramParts.joined(separator: ",\n        ")
 
     let allInits = joinInitArguments(nonClosureProperties: nonClosureProperties, closureInits: closureInits)
 
-    let locationCode = needsSourceLocation
+    let locationCode =
+        needsSourceLocation
         ? "\n        let location = Source.Location(fileID: fileID, filePath: filePath, line: line, column: column)"
         : ""
 
     return """
-    /// Creates an unimplemented witness where all operations fatal error or throw.
-    ///
-    /// Use this in tests to start with a placeholder and override only what you need:
-    /// ```swift
-    /// var api = \(raw: structName).unimplemented()
-    /// api.fetch = { id in "mocked result" }
-    /// ```
-    \(raw: inlinableAttr)\(raw: accessModifier)static func unimplemented(
-        \(raw: allParams)
-    ) -> Self {\(raw: locationCode)
-        return Self(
-            \(raw: allInits)
-        )
-    }
-    """
+        /// Creates an unimplemented witness where all operations fatal error or throw.
+        ///
+        /// Use this in tests to start with a placeholder and override only what you need:
+        /// ```swift
+        /// var api = \(raw: structName).unimplemented()
+        /// api.fetch = { id in "mocked result" }
+        /// ```
+        \(raw: inlinableAttr)\(raw: accessModifier)static func unimplemented(
+            \(raw: allParams)
+        ) -> Self {\(raw: locationCode)
+            return Self(
+                \(raw: allInits)
+            )
+        }
+        """
 }
 
 // MARK: - Mock Member Generation
@@ -398,22 +416,22 @@ private func generateMockMember(
     let allInits = joinInitArguments(nonClosureProperties: nonClosureProperties, closureInits: closureInits)
 
     return """
-    /// Creates a mock witness with fixed return values.
-    ///
-    /// This is useful for tests where you want simple, predictable values:
-    /// ```swift
-    /// let api = \(raw: structName).mock(fetchUser: testUser)
-    /// ```
-    ///
-    /// For Void-returning operations, the parameter defaults to `()`.
-    \(raw: inlinableAttr)\(raw: accessModifier)static func mock(
-        \(raw: allParams)
-    ) -> Self {
-        Self(
-            \(raw: allInits)
-        )
-    }
-    """
+        /// Creates a mock witness with fixed return values.
+        ///
+        /// This is useful for tests where you want simple, predictable values:
+        /// ```swift
+        /// let api = \(raw: structName).mock(fetchUser: testUser)
+        /// ```
+        ///
+        /// For Void-returning operations, the parameter defaults to `()`.
+        \(raw: inlinableAttr)\(raw: accessModifier)static func mock(
+            \(raw: allParams)
+        ) -> Self {
+            Self(
+                \(raw: allInits)
+            )
+        }
+        """
 }
 
 // MARK: - Init Argument Joining
@@ -447,17 +465,17 @@ private func generateConstantMember(
     let closureBody = "{ \(closureParams) \(throwsAnnotation)-> \(returnType) in value }"
 
     return """
-    /// Creates a generator that always returns the given value.
-    ///
-    /// ```swift
-    /// let generator = \(raw: structName).constant(fixedValue)
-    /// print(generator())  // fixedValue
-    /// print(generator())  // fixedValue
-    /// ```
-    \(raw: inlinableAttr)\(raw: accessModifier)static func constant(_ value: \(raw: returnType)) -> Self {
-        Self(\(raw: initLabel): \(raw: closureBody))
-    }
-    """
+        /// Creates a generator that always returns the given value.
+        ///
+        /// ```swift
+        /// let generator = \(raw: structName).constant(fixedValue)
+        /// print(generator())  // fixedValue
+        /// print(generator())  // fixedValue
+        /// ```
+        \(raw: inlinableAttr)\(raw: accessModifier)static func constant(_ value: \(raw: returnType)) -> Self {
+            Self(\(raw: initLabel): \(raw: closureBody))
+        }
+        """
 }
 
 // MARK: - Mock Generation Helpers
@@ -543,7 +561,7 @@ struct ClosureProperty {
     /// e.g., "throws(Witness.Unimplemented.Error) " or "throws " or ""
     /// Trailing space included when non-empty.
     var throwsAnnotation: String {
-        if let throwsType = throwsType {
+        if let throwsType {
             return "throws(\(throwsType.trimmedDescription)) "
         } else if isThrowing {
             return "throws "
@@ -567,7 +585,7 @@ struct ClosureProperty {
         var specs: [String] = []
         if isAsync { specs.append("async") }
         if isThrowing {
-            if let throwsType = throwsType {
+            if let throwsType {
                 specs.append("throws(\(throwsType.trimmedDescription))")
             } else {
                 specs.append("throws")
@@ -663,7 +681,8 @@ struct ClosureParameter {
     var baseType: TypeSyntax {
         var result = type
         if hasOwnershipAnnotation,
-           let attributed = result.as(AttributedTypeSyntax.self) {
+            let attributed = result.as(AttributedTypeSyntax.self)
+        {
             result = attributed.baseType
         }
         if let attributed = result.as(AttributedTypeSyntax.self) {
@@ -685,9 +704,7 @@ struct ClosureParameter {
 /// Whether the declaration has restricted access (package, private, or fileprivate).
 private func hasRestrictedAccess(_ modifiers: DeclModifierListSyntax) -> Bool {
     modifiers.contains {
-        $0.name.tokenKind == .keyword(.package) ||
-        $0.name.tokenKind == .keyword(.private) ||
-        $0.name.tokenKind == .keyword(.fileprivate)
+        $0.name.tokenKind == .keyword(.package) || $0.name.tokenKind == .keyword(.private) || $0.name.tokenKind == .keyword(.fileprivate)
     }
 }
 
@@ -696,8 +713,9 @@ private func hasRestrictedAccess(_ modifiers: DeclModifierListSyntax) -> Bool {
 private func canInline(from structDecl: StructDeclSyntax) -> Bool {
     structDecl.memberBlock.members.allSatisfy { member in
         guard let varDecl = member.decl.as(VariableDeclSyntax.self),
-              let binding = varDecl.bindings.first,
-              binding.accessorBlock == nil else { return true }
+            let binding = varDecl.bindings.first,
+            binding.accessorBlock == nil
+        else { return true }
         return !hasRestrictedAccess(varDecl.modifiers)
     }
 }
@@ -707,12 +725,12 @@ private func extractClosureProperties(from structDecl: StructDeclSyntax) -> [Clo
 
     for member in structDecl.memberBlock.members {
         guard let varDecl = member.decl.as(VariableDeclSyntax.self),
-              (varDecl.bindingSpecifier.tokenKind == .keyword(.var) ||
-               varDecl.bindingSpecifier.tokenKind == .keyword(.let)),
-              let binding = varDecl.bindings.first,
-              let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
-              let typeAnnotation = binding.typeAnnotation,
-              let functionType = extractFunctionType(from: typeAnnotation.type) else {
+            varDecl.bindingSpecifier.tokenKind == .keyword(.var) || varDecl.bindingSpecifier.tokenKind == .keyword(.let),
+            let binding = varDecl.bindings.first,
+            let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
+            let typeAnnotation = binding.typeAnnotation,
+            let functionType = extractFunctionType(from: typeAnnotation.type)
+        else {
             continue
         }
 
@@ -722,18 +740,20 @@ private func extractClosureProperties(from structDecl: StructDeclSyntax) -> [Clo
         // Extract the typed error type from throws clause
         let throwsType: TypeSyntax? = functionType.effectSpecifiers?.throwsClause?.type
 
-        properties.append(ClosureProperty(
-            name: identifier.identifier.text,
-            functionType: functionType,
-            parameters: parameters,
-            hasLabels: hasLabels,
-            isAsync: functionType.effectSpecifiers?.asyncSpecifier != nil,
-            isThrowing: functionType.effectSpecifiers?.throwsClause != nil,
-            throwsType: throwsType,
-            returnType: functionType.returnClause.type,
-            originalType: typeAnnotation.type,
-            isOptional: typeAnnotation.type.as(OptionalTypeSyntax.self) != nil
-        ))
+        properties.append(
+            ClosureProperty(
+                name: identifier.identifier.text,
+                functionType: functionType,
+                parameters: parameters,
+                hasLabels: hasLabels,
+                isAsync: functionType.effectSpecifiers?.asyncSpecifier != nil,
+                isThrowing: functionType.effectSpecifiers?.throwsClause != nil,
+                throwsType: throwsType,
+                returnType: functionType.returnClause.type,
+                originalType: typeAnnotation.type,
+                isOptional: typeAnnotation.type.as(OptionalTypeSyntax.self) != nil
+            )
+        )
     }
 
     return properties
@@ -757,8 +777,9 @@ private func extractFunctionType(from type: TypeSyntax) -> FunctionTypeSyntax? {
 
     // Parenthesized tuple type (e.g., `(@Sendable () -> Void)` in `(@Sendable () -> Void)?`)
     if let tuple = type.as(TupleTypeSyntax.self),
-       tuple.elements.count == 1,
-       let element = tuple.elements.first {
+        tuple.elements.count == 1,
+        let element = tuple.elements.first
+    {
         return extractFunctionType(from: element.type)
     }
 
@@ -789,10 +810,13 @@ private func extractParameters(from functionType: FunctionTypeSyntax) -> [Closur
                     switch simple.specifier.tokenKind {
                     case .keyword(.inout):
                         isInout = true
+
                     case .keyword(.borrowing):
                         ownership = .borrowing
+
                     case .keyword(.consuming):
                         ownership = .consuming
+
                     default:
                         break
                     }
@@ -800,13 +824,15 @@ private func extractParameters(from functionType: FunctionTypeSyntax) -> [Closur
             }
         }
 
-        parameters.append(ClosureParameter(
-            label: label,
-            internalName: internalName,
-            type: param.type,
-            isInout: isInout,
-            ownership: ownership
-        ))
+        parameters.append(
+            ClosureParameter(
+                label: label,
+                internalName: internalName,
+                type: param.type,
+                isInout: isInout,
+                ownership: ownership
+            )
+        )
     }
 
     return parameters
@@ -882,7 +908,7 @@ private func generateCallAsFunction(for property: ClosureProperty, inlinable: Bo
 }
 
 private func generateMethodSignature(name: String, functionType: FunctionTypeSyntax) -> String {
-    let labels = functionType.parameters.enumerated().map { index, param in
+    let labels = functionType.parameters.map { param in
         if let second = param.secondName?.text { return second }
         if let first = param.firstName?.text, first != "_" { return first }
         return "_"
@@ -1002,27 +1028,27 @@ private func generateCaseEnum(for properties: [ClosureProperty]) -> String {
     }
 
     return """
-    public enum Case: Finite_Primitives.Finite.Enumerable, Sendable {
-                \(caseCases)
+        public enum Case: Finite_Primitives.Finite.Enumerable, Sendable {
+                    \(caseCases)
 
-                @inlinable
-                public static var count: Cardinal_Primitives.Cardinal { Cardinal_Primitives.Cardinal(\(caseCount)) }
+                    @inlinable
+                    public static var count: Cardinal_Primitives.Cardinal { Cardinal_Primitives.Cardinal(\(caseCount)) }
 
-                @inlinable
-                public var ordinal: Ordinal_Primitives.Ordinal {
-                    switch self {
-                    \(ordinalCases)
+                    @inlinable
+                    public var ordinal: Ordinal_Primitives.Ordinal {
+                        switch self {
+                        \(ordinalCases)
+                        }
+                    }
+
+                    @inlinable
+                    public init(_unchecked: Void, ordinal: Ordinal_Primitives.Ordinal) {
+                        switch ordinal.rawValue {
+                        \(initCases)
+                        }
                     }
                 }
-
-                @inlinable
-                public init(_unchecked: Void, ordinal: Ordinal_Primitives.Ordinal) {
-                    switch ordinal.rawValue {
-                    \(initCases)
-                    }
-                }
-            }
-    """
+        """
 }
 
 /// Generates the Calls → Case property.
@@ -1030,13 +1056,13 @@ private func generateCallsCaseProperty(for properties: [ClosureProperty]) -> Str
     let cases = properties.map { "case .\($0.methodName): .\($0.methodName)" }
         .joined(separator: "\n                ")
     return """
-    @inlinable
-            public var `case`: Case {
-                switch self {
-                \(cases)
+        @inlinable
+                public var `case`: Case {
+                    switch self {
+                    \(cases)
+                    }
                 }
-            }
-    """
+        """
 }
 
 /// Generates the Result enum with Standard_Library_Extensions.Result<Success, Failure> per action.
@@ -1045,10 +1071,10 @@ private func generateResultEnum(for properties: [ClosureProperty]) -> String {
         generateTypedResultCase(for: property)
     }.joined(separator: "\n                ")
     return """
-    public enum Result: ~Copyable {
-                \(cases)
-            }
-    """
+        public enum Result: ~Copyable {
+                    \(cases)
+                }
+        """
 }
 
 /// Generates a typed Result case for a closure property.
@@ -1089,17 +1115,20 @@ private func extractNonClosureProperties(from structDecl: StructDeclSyntax) -> [
     var properties: [NonClosureProperty] = []
     for member in structDecl.memberBlock.members {
         guard let varDecl = member.decl.as(VariableDeclSyntax.self),
-              let binding = varDecl.bindings.first,
-              binding.accessorBlock == nil,
-              let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
-              let typeAnnotation = binding.typeAnnotation,
-              extractFunctionType(from: typeAnnotation.type) == nil else {
+            let binding = varDecl.bindings.first,
+            binding.accessorBlock == nil,
+            let identifier = binding.pattern.as(IdentifierPatternSyntax.self),
+            let typeAnnotation = binding.typeAnnotation,
+            extractFunctionType(from: typeAnnotation.type) == nil
+        else {
             continue
         }
-        properties.append(NonClosureProperty(
-            name: identifier.identifier.text,
-            type: typeAnnotation.type.trimmedDescription
-        ))
+        properties.append(
+            NonClosureProperty(
+                name: identifier.identifier.text,
+                type: typeAnnotation.type.trimmedDescription
+            )
+        )
     }
     return properties
 }
@@ -1119,10 +1148,7 @@ private func generateUnimplementedClosure(for property: ClosureProperty, structN
     let hasConsumingParams = property.parameters.contains { $0.ownership == .consuming }
 
     // Can only throw Witness.Unimplemented.Error when the closure's error type matches
-    let canThrowUnimplemented = property.isThrowing && (
-        property.throwsType == nil ||
-        property.throwsType?.trimmedDescription == "Witness.Unimplemented.Error"
-    )
+    let canThrowUnimplemented = property.isThrowing && (property.throwsType == nil || property.throwsType?.trimmedDescription == "Witness.Unimplemented.Error")
     let needsFatalError = !canThrowUnimplemented
 
     // Generate closure parameter list.
@@ -1146,14 +1172,14 @@ private func generateUnimplementedClosure(for property: ClosureProperty, structN
     if canThrowUnimplemented {
         // Throwing closures with compatible error type: throw Witness.Unimplemented.Error
         return """
-\(initLabel): \(closureStart)
-                throw Witness.Unimplemented.Error(
-                    witness: "\(structName)",
-                    operation: "\(operationSignature)",
-                    location: location
-                )
-            }
-"""
+            \(initLabel): \(closureStart)
+                            throw Witness.Unimplemented.Error(
+                                witness: "\(structName)",
+                                operation: "\(operationSignature)",
+                                location: location
+                            )
+                        }
+            """
     } else if hasConsumingParams {
         // Non-throwing with consuming params: consume then fatalError
         let consumeStatements = property.parameters.enumerated().compactMap { index, param -> String? in
@@ -1161,18 +1187,18 @@ private func generateUnimplementedClosure(for property: ClosureProperty, structN
             return "_ = consume p\(index)"
         }.joined(separator: "\n                ")
         return """
-\(initLabel): \(closureStart)
-                \(consumeStatements)
-                fatalError("\\(Self.self).\\(#function) is unimplemented")
-            }
-"""
+            \(initLabel): \(closureStart)
+                            \(consumeStatements)
+                            fatalError("\\(Self.self).\\(#function) is unimplemented")
+                        }
+            """
     } else {
         // Non-throwing, no consuming params: just fatalError
         return """
-\(initLabel): \(closureStart)
-                fatalError("\\(Self.self).\\(#function) is unimplemented")
-            }
-"""
+            \(initLabel): \(closureStart)
+                            fatalError("\\(Self.self).\\(#function) is unimplemented")
+                        }
+            """
     }
 }
 
@@ -1191,7 +1217,14 @@ private func buildOperationSignature(for property: ClosureProperty) -> String {
 
 // MARK: - Observe Accessor Generation
 
-private func generateObserveStruct(for properties: [ClosureProperty], nonClosureProperties: [NonClosureProperty], structName: String, isPublic: Bool, inlinable: Bool = true, isSendable: Bool = true) -> DeclSyntax {
+private func generateObserveStruct(
+    for properties: [ClosureProperty],
+    nonClosureProperties: [NonClosureProperty],
+    structName: String,
+    isPublic: Bool,
+    inlinable: Bool = true,
+    isSendable: Bool = true
+) -> DeclSyntax {
     // Non-closure property pass-through from witness
     let nonClosurePassthrough = nonClosureProperties.map { "\($0.name): witness.\($0.name)" }
 
@@ -1282,20 +1315,23 @@ private func generateObserveClosure(
         // @concurrent for async @Sendable closures. Check the unwrapped type —
         // needsNonsendingAnnotation doesn't see through OptionalTypeSyntax.
         if property.isAsync,
-           let optionalWrapped = property.originalType.as(OptionalTypeSyntax.self)?.wrappedType {
+            let optionalWrapped = property.originalType.as(OptionalTypeSyntax.self)?.wrappedType
+        {
             // Unwrap through parenthesized types: (nonisolated(nonsending) @Sendable () async -> Void)?
             // wrappedType is TupleTypeSyntax with one element for parenthesized function types
             let innerType: TypeSyntax
             if let tuple = optionalWrapped.as(TupleTypeSyntax.self),
-               tuple.elements.count == 1,
-               let single = tuple.elements.first {
+                tuple.elements.count == 1,
+                let single = tuple.elements.first
+            {
                 innerType = single.type
             } else {
                 innerType = optionalWrapped
             }
             if let attributed = innerType.as(AttributedTypeSyntax.self),
-               !attributed.attributes.contains(where: { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "concurrent" }),
-               attributed.attributes.contains(where: { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "Sendable" }) {
+                !attributed.attributes.contains(where: { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "concurrent" }),
+                attributed.attributes.contains(where: { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription == "Sendable" })
+            {
                 return "\(initLabel): witness.\(property.name)"
             }
         }
@@ -1306,15 +1342,16 @@ private func generateObserveClosure(
         )
         // Use the unwrapped originalType (includes @Sendable) for the .map return annotation.
         // originalType is e.g. `(@Sendable () -> Void)?`, wrappedType is `(@Sendable () -> Void)`.
-        let wrappedType = property.originalType.as(OptionalTypeSyntax.self)?.wrappedType.trimmedDescription
+        let wrappedType =
+            property.originalType.as(OptionalTypeSyntax.self)?.wrappedType.trimmedDescription
             ?? property.functionType.trimmedDescription
         return """
-        \(initLabel): witness.\(property.name).map { _original -> \(wrappedType) in
-                        { \(closureParams) \(throwsAnno)-> \(returnType) in
-                    \(innerBody)
+            \(initLabel): witness.\(property.name).map { _original -> \(wrappedType) in
+                            { \(closureParams) \(throwsAnno)-> \(returnType) in
+                        \(innerBody)
+                            }
                         }
-                    }
-        """
+            """
     }
 
     // Under SE-0461, @Sendable async closure literals default to @concurrent.
@@ -1332,10 +1369,10 @@ private func generateObserveClosure(
     )
 
     return """
-    \(initLabel): { [witness] \(closureParams) \(throwsAnno)-> \(returnType) in
-    \(body)
-                }
-    """
+        \(initLabel): { [witness] \(closureParams) \(throwsAnno)-> \(returnType) in
+        \(body)
+                    }
+        """
 }
 
 /// Generates the body of an observe closure, parameterized by the call expression.
@@ -1357,9 +1394,11 @@ private func generateObserveBody(
     case .before:
         beforeCall = "observer"
         afterCall = ""
+
     case .after:
         beforeCall = ""
         afterCall = "observer"
+
     case .both:
         beforeCall = "before"
         afterCall = "after"
@@ -1373,70 +1412,72 @@ private func generateObserveBody(
     case .before:
         let returnKeyword = hasReturn ? "return " : ""
         return """
-                        \(beforeCall)(\(actionConstruction))
-                        \(returnKeyword)\(property.tryPrefix)\(property.awaitPrefix)\(callExpression)
-        """
+                            \(beforeCall)(\(actionConstruction))
+                            \(returnKeyword)\(property.tryPrefix)\(property.awaitPrefix)\(callExpression)
+            """
 
     case .after where property.isThrowing, .both where property.isThrowing:
-        let beforeLine = variant == .both
+        let beforeLine =
+            variant == .both
             ? "\(beforeCall)(action)\n                        "
             : ""
         let successBody: String
         if hasReturn {
             successBody = """
-            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(result)"))
-                                \(afterCall)(__outcome)
-                                let __result = __outcome.__consumeResult()
-                                switch consume __result {
-                                case .\(property.methodName)(.success(let __value)): return __value
-                                default: fatalError("unreachable")
-                                }
-            """
+                let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(result)"))
+                                    \(afterCall)(__outcome)
+                                    let __result = __outcome.__consumeResult()
+                                    switch consume __result {
+                                    case .\(property.methodName)(.success(let __value)): return __value
+                                    default: fatalError("unreachable")
+                                    }
+                """
         } else {
             successBody = """
-            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(())"))
-                                \(afterCall)(__outcome)
-            """
+                let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(())"))
+                                    \(afterCall)(__outcome)
+                """
         }
         let doThrowsType = property.throwsType?.trimmedDescription ?? "any Error"
         return """
-                        let action: Calls = \(actionConstruction)
-                        \(beforeLine)do throws(\(doThrowsType)) {
-                            \(hasReturn ? "let result = " : "")try \(property.awaitPrefix)\(callExpression)
-                            \(successBody)
-                        } catch {
-                            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).failure(error)"))
-                            \(afterCall)(__outcome)
-                            throw error
-                        }
-        """
+                            let action: Calls = \(actionConstruction)
+                            \(beforeLine)do throws(\(doThrowsType)) {
+                                \(hasReturn ? "let result = " : "")try \(property.awaitPrefix)\(callExpression)
+                                \(successBody)
+                            } catch {
+                                let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).failure(error)"))
+                                \(afterCall)(__outcome)
+                                throw error
+                            }
+            """
 
     case .after, .both:
-        let beforeLine = variant == .both
+        let beforeLine =
+            variant == .both
             ? "\(beforeCall)(action)\n                        "
             : ""
         let resultBody: String
         if hasReturn {
             resultBody = """
-            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(result)"))
-                        \(afterCall)(__outcome)
-                        let __result = __outcome.__consumeResult()
-                        switch consume __result {
-                        case .\(property.methodName)(.success(let __value)): return __value
-                        default: fatalError("unreachable")
-                        }
-            """
+                let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(result)"))
+                            \(afterCall)(__outcome)
+                            let __result = __outcome.__consumeResult()
+                            switch consume __result {
+                            case .\(property.methodName)(.success(let __value)): return __value
+                            default: fatalError("unreachable")
+                            }
+                """
         } else {
             resultBody = """
-            let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(())"))
-                        \(afterCall)(__outcome)
-            """
+                let __outcome = \(outcomeExpr(witnessResult: "\(witnessResultType).success(())"))
+                            \(afterCall)(__outcome)
+                """
         }
         return """
-                        let action: Calls = \(actionConstruction)
-                        \(beforeLine)\(hasReturn ? "let result = " : "")\(property.awaitPrefix)\(callExpression)
-                        \(resultBody)
-        """
+                            let action: Calls = \(actionConstruction)
+                            \(beforeLine)\(hasReturn ? "let result = " : "")\(property.awaitPrefix)\(callExpression)
+                            \(resultBody)
+            """
     }
 }
 
@@ -1469,8 +1510,10 @@ enum WitnessDiagnostic: String, DiagnosticMessage {
         switch self {
         case .requiresStructOrEnum:
             return "@Witness can only be applied to structs or enums"
+
         case .noClosureProperties:
             return "@Witness requires at least one closure property"
+
         case .noEnumCases:
             return "@Witness requires at least one enum case"
         }

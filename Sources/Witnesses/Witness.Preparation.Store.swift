@@ -69,7 +69,7 @@ extension Witness.Preparation {
                 guard let ptr = unsafe storage[id] else {
                     return nil
                 }
-                return unsafe Unmanaged<Ownership.Shared<K.Value>>.fromOpaque(ptr)
+                return unsafe Unmanaged<Ownership.Immutable<K.Value>>.fromOpaque(ptr)
                     .takeUnretainedValue()
                     .value
             }
@@ -91,7 +91,7 @@ extension Witness.Preparation {
                 let id = ObjectIdentifier(K.self)
                 guard let ptr = unsafe storage[id] else { return nil }
                 return body(
-                    unsafe Unmanaged<Ownership.Shared<K.Value>>.fromOpaque(ptr)
+                    unsafe Unmanaged<Ownership.Immutable<K.Value>>.fromOpaque(ptr)
                         .takeUnretainedValue()
                         .value
                 )
@@ -106,7 +106,7 @@ extension Witness.Preparation {
         public func set<K: Witness.Key>(_ key: K.Type, value: consuming K.Value) {
             // Box and retain before entering the lock — consuming moves happen here.
             let ptr = unsafe UnsafeRawPointer(
-                Unmanaged.passRetained(Ownership.Shared(value)).toOpaque()
+                Unmanaged.passRetained(Ownership.Immutable(value)).toOpaque()
             )
             lock.withLock { _ in
                 let id = ObjectIdentifier(K.self)
@@ -131,7 +131,7 @@ extension Witness.Preparation {
                 guard let ptr = unsafe storage.removeValue(forKey: id) else {
                     return nil
                 }
-                let box = unsafe Unmanaged<Ownership.Shared<K.Value>>.fromOpaque(ptr)
+                let box = unsafe Unmanaged<Ownership.Immutable<K.Value>>.fromOpaque(ptr)
                     .takeRetainedValue()
                 return box.value
             }

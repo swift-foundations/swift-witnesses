@@ -99,7 +99,8 @@ extension WitnessUnimplementedLocationTests.EdgeCase {
             line: Int(UInt32.max),
             column: 1
         )
-        #expect(location.line == Int(UInt32.max))
+        let expectedLine = try! Text.Line.Number(Int(UInt32.max))
+        #expect(location.line == expectedLine)
     }
 
     @Test

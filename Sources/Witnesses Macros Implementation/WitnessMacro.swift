@@ -298,6 +298,8 @@ extension WitnessMacro: ExtensionMacro {
         providingExtensionsOf type: some TypeSyntaxProtocol,
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
+            // Untyped throws forced by external protocol SwiftSyntaxMacros.ExtensionMacro.expansion.
+            // swiftlint:disable:next typed_throws_required
     ) throws -> [ExtensionDeclSyntax] {
         var extensions: [ExtensionDeclSyntax] = []
 

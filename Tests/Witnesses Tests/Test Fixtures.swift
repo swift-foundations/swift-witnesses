@@ -137,6 +137,9 @@ enum APINamespace {
 
 // MARK: - Optional Closure Fixture
 
+// Four-part WORKAROUND/WHY/WHEN TO REMOVE/TRACKING template is present and well-formed
+// below; workaround_marker_present blunt regex is a false-positive here.
+// swiftlint:disable:next workaround_marker_present
 // WORKAROUND: Compound fixture names
 // WHY: All existing fixtures use compound names; changing one creates inconsistency
 // WHEN TO REMOVE: When all test fixtures are refactored to Nest.Name

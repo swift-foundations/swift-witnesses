@@ -99,6 +99,8 @@ extension WitnessUnimplementedLocationTests.EdgeCase {
             line: Int(UInt32.max),
             column: 1
         )
+        // UInt32.max is a valid positive line number, so Line.Number never throws.
+        // swiftlint:disable:next force_try
         let expectedLine = try! Text.Line.Number(Int(UInt32.max))
         #expect(location.line == expectedLine)
     }

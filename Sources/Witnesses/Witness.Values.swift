@@ -37,42 +37,6 @@ extension Witness {
     /// The execution mode is now part of ``Witness/Context`` rather than `Values`.
     /// Per [API-IMPL-002], mode is a state machine enum rather than a boolean.
     public struct Values: Sendable {
-        // WHY: Category D — structural Sendable workaround (SP-5) per [MEM-SAFE-024].
-        // WHY: UnsafeRawPointer in the dictionary blocks structural Sendable inference.
-        // WHY: No caller invariant to uphold — COW discipline at the Values layer
-        // WHY: ensures each isolation domain owns its unique _Storage after first write.
-        // WHY: Encapsulation invariant per [MEM-SAFE-021] — `_Storage` is
-        // WHY: `@usableFromInline` but its raw-pointer storage is internal-only;
-        // WHY: consumers see only the type-safe `Values` surface.
-        // WHEN TO REMOVE: When compiler gains structural Sendable inference through
-        // WHEN TO REMOVE: UnsafeRawPointer-backed Copyable containers.
-        // TRACKING: unsafe-audit-findings.md Category D; SP-5.
-        /// Internal storage with proper memory cleanup.
-        /// Uses UnsafeRawPointer to avoid existential overhead (8 bytes vs 40 bytes per entry).
-        @usableFromInline
-        final class _Storage: @unchecked Sendable {
-            @usableFromInline
-            var dict: [ObjectIdentifier: UnsafeRawPointer]
-
-            @usableFromInline
-            init() {
-                unsafe (self.dict = [:])
-            }
-
-            @usableFromInline
-            func set(_ ptr: UnsafeRawPointer, for key: ObjectIdentifier) {
-                unsafe (dict[key] = ptr)
-            }
-
-            /// Releases all retained boxes on deallocation.
-            deinit {
-                var iter = unsafe dict.values.makeIterator()
-                while let ptr = unsafe iter.next() {
-                    unsafe Unmanaged<AnyObject>.fromOpaque(ptr).release()
-                }
-            }
-        }
-
         /// Storage for explicit overrides using type identifier as key with UnsafeRawPointer values.
         @usableFromInline
         internal var _storage: _Storage
@@ -100,9 +64,42 @@ extension Witness {
 }
 
 extension Witness.Values {
+    // WHY: Category D — structural Sendable workaround (SP-5) per [MEM-SAFE-024].
+    // WHY: UnsafeRawPointer in the dictionary blocks structural Sendable inference.
+    // WHY: No caller invariant to uphold — COW discipline at the Values layer
+    // WHY: ensures each isolation domain owns its unique _Storage after first write.
+    // WHY: Encapsulation invariant per [MEM-SAFE-021] — `_Storage` is
+    // WHY: `@usableFromInline` but its raw-pointer storage is internal-only;
+    // WHY: consumers see only the type-safe `Values` surface.
+    // WHEN TO REMOVE: When compiler gains structural Sendable inference through
+    // WHEN TO REMOVE: UnsafeRawPointer-backed Copyable containers.
+    // TRACKING: unsafe-audit-findings.md Category D; SP-5.
+    /// Internal storage with proper memory cleanup.
+    /// Uses UnsafeRawPointer to avoid existential overhead (8 bytes vs 40 bytes per entry).
+    @usableFromInline
+    final class _Storage: @unchecked Sendable {
+        @usableFromInline
+        var dict: [ObjectIdentifier: UnsafeRawPointer]
+
+        @usableFromInline
+        init() {
+            unsafe (self.dict = [:])
+        }
+
+        /// Releases all retained boxes on deallocation.
+        deinit {
+            var iter = unsafe dict.values.makeIterator()
+            while let ptr = unsafe iter.next() {
+                unsafe Unmanaged<AnyObject>.fromOpaque(ptr).release()
+            }
+        }
+    }
+}
+
+extension Witness.Values {
     /// Ensures unique storage for mutation (Copy-on-Write).
     @inlinable
-    mutating func _ensureUnique() {
+    package mutating func _ensureUnique() {
         if !isKnownUniquelyReferenced(&_storage) {
             let newStorage = _Storage()
             // Copy all entries (retaining each box)
@@ -292,6 +289,11 @@ extension Witness.Values {
 }
 
 extension Witness.Values._Storage {
+    @usableFromInline
+    func set(_ ptr: UnsafeRawPointer, for key: ObjectIdentifier) {
+        unsafe (dict[key] = ptr)
+    }
+
     @usableFromInline
     func copyFrom(_ other: Witness.Values._Storage) {
         var iter = unsafe other.dict.makeIterator()

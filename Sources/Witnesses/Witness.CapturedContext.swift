@@ -52,31 +52,33 @@ extension Witness {
         public init() {
             self.values = Witness.Context.current
         }
+    }
+}
 
-        /// Executes an operation with the captured witness context.
-        ///
-        /// - Parameter operation: The operation to execute.
-        /// - Returns: The result of the operation.
-        /// - Throws: The typed error from the operation.
-        @inlinable
+extension Witness.CapturedContext {
+    /// Executes an operation with the captured witness context.
+    ///
+    /// - Parameter operation: The operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    @inlinable
+    public func withValues<R, E: Swift.Error>(
+        _ operation: () throws(E) -> R
+    ) throws(E) -> R {
+        try Witness.Context.with({ $0 = self.values }, operation: operation)
+    }
+
+    /// Executes an async operation with the captured witness context.
+    ///
+    /// - Parameter operation: The async operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    @inlinable
+    nonisolated(nonsending)
         public func withValues<R, E: Swift.Error>(
-            _ operation: () throws(E) -> R
-        ) throws(E) -> R {
-            try Witness.Context.with({ $0 = self.values }, operation: operation)
-        }
-
-        /// Executes an async operation with the captured witness context.
-        ///
-        /// - Parameter operation: The async operation to execute.
-        /// - Returns: The result of the operation.
-        /// - Throws: The typed error from the operation.
-        @inlinable
-        nonisolated(nonsending)
-            public func withValues<R, E: Swift.Error>(
-                _ operation: nonisolated(nonsending) () async throws(E) -> R
-            ) async throws(E) -> R
-        {
-            try await Witness.Context.with({ $0 = self.values }, operation: operation)
-        }
+            _ operation: nonisolated(nonsending) () async throws(E) -> R
+        ) async throws(E) -> R
+    {
+        try await Witness.Context.with({ $0 = self.values }, operation: operation)
     }
 }

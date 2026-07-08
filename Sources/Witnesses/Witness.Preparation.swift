@@ -42,15 +42,19 @@ extension Witness {
     /// - Prepared values are available within the scope and inherited by child tasks
     /// - Scoped API per [API-IMPL-010] - no global one-shot mutation
     /// - For explicit overrides, use `Witness.Context.with` or `withWitnesses` instead
-    public enum Preparation {
-        /// TaskLocal storage for the current preparation store.
-        @TaskLocal
-        internal static var store: Store?
+    public enum Preparation {}
+}
 
-        /// The current preparation store, if any.
-        public static var current: Store? {
-            store
-        }
+// MARK: - Store Access
+
+extension Witness.Preparation {
+    /// TaskLocal storage for the current preparation store.
+    @TaskLocal
+    internal static var store: Store?
+
+    /// The current preparation store, if any.
+    public static var current: Store? {
+        store
     }
 }
 

@@ -54,32 +54,6 @@ extension Witness.Context {
             self.values = Witness.Context.current
             self.mode = Witness.Context.currentMode
         }
-
-        /// Execute a synchronous operation with the captured witness context.
-        ///
-        /// - Parameter operation: The operation to execute.
-        /// - Returns: The result of the operation.
-        /// - Throws: The typed error from the operation.
-        @inlinable
-        public func yield<R, E: Swift.Error>(
-            _ operation: () throws(E) -> R
-        ) throws(E) -> R {
-            try Witness.Context.with(mode: mode, { $0 = values }, operation: operation)
-        }
-
-        /// Execute an asynchronous operation with the captured witness context.
-        ///
-        /// - Parameter operation: The async operation to execute.
-        /// - Returns: The result of the operation.
-        /// - Throws: The typed error from the operation.
-        @inlinable
-        nonisolated(nonsending)
-            public func yield<R, E: Swift.Error>(
-                _ operation: nonisolated(nonsending) () async throws(E) -> R
-            ) async throws(E) -> R
-        {
-            try await Witness.Context.with(mode: mode, { $0 = values }, operation: operation)
-        }
     }
 
     /// Capture the current witness context for use in escaping closures.
@@ -104,5 +78,33 @@ extension Witness.Context {
         _ operation: (Escaped) async throws(E) -> R
     ) async throws(E) -> R {
         try await operation(Escaped())
+    }
+}
+
+extension Witness.Context.Escaped {
+    /// Execute a synchronous operation with the captured witness context.
+    ///
+    /// - Parameter operation: The operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    @inlinable
+    public func yield<R, E: Swift.Error>(
+        _ operation: () throws(E) -> R
+    ) throws(E) -> R {
+        try Witness.Context.with(mode: mode, { $0 = values }, operation: operation)
+    }
+
+    /// Execute an asynchronous operation with the captured witness context.
+    ///
+    /// - Parameter operation: The async operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    @inlinable
+    nonisolated(nonsending)
+        public func yield<R, E: Swift.Error>(
+            _ operation: nonisolated(nonsending) () async throws(E) -> R
+        ) async throws(E) -> R
+    {
+        try await Witness.Context.with(mode: mode, { $0 = values }, operation: operation)
     }
 }

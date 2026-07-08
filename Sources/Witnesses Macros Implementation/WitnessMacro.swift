@@ -24,7 +24,9 @@ public struct WitnessMacro {}
 /// Represents the derive modes specified in @Witness
 struct DeriveOptions: OptionSet {
     let rawValue: UInt8
+}
 
+extension DeriveOptions {
     static let mock = Self(rawValue: 1 << 0)
     static let generator = Self(rawValue: 1 << 1)
 }
@@ -523,7 +525,9 @@ struct ClosureProperty {
     let originalType: TypeSyntax
     /// Whether the closure property is optional (e.g., `(@Sendable () -> Void)?`).
     let isOptional: Bool
+}
 
+extension ClosureProperty {
     /// Whether the original type annotation includes `@concurrent`.
     ///
     /// Under NonisolatedNonsendingByDefault (SE-0461), `@Sendable async` closure
@@ -667,7 +671,9 @@ struct ClosureParameter {
     let isInout: Bool
     /// `.borrowing` or `.consuming`, `nil` for default/`inout`
     let ownership: Keyword?
+}
 
+extension ClosureParameter {
     /// Whether this parameter has an explicit ownership annotation (`borrowing`/`consuming`/`inout`).
     /// Parameters with ownership annotations are omitted from Calls enum associated values.
     var hasOwnershipAnnotation: Bool {
@@ -1507,7 +1513,9 @@ enum WitnessDiagnostic: String, DiagnosticMessage {
     case requiresStructOrEnum
     case noClosureProperties
     case noEnumCases
+}
 
+extension WitnessDiagnostic {
     var message: String {
         switch self {
         case .requiresStructOrEnum:

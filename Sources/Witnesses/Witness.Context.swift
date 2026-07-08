@@ -78,20 +78,22 @@ extension Witness.Context {
     /// Mode is managed explicitly by ``_withScope(mode:_:operation:)-5f2ep``,
     /// not by L1's `isTestContext` default chain.
     @usableFromInline
-    internal enum _ContextKey: Dependency.Key {
-        @usableFromInline
-        static var liveValue: Witness.Context {
-            Witness.Context(values: .init(), mode: .live)
-        }
-
-        @usableFromInline
-        static var testValue: Witness.Context { liveValue }
-    }
+    internal enum _ContextKey: Dependency.Key {}
 
     /// Current context read from L1's dependency dictionary.
     private static var _current: Witness.Context {
         Dependency.Scope.current[_ContextKey.self]
     }
+}
+
+extension Witness.Context._ContextKey {
+    @usableFromInline
+    static var liveValue: Witness.Context {
+        Witness.Context(values: .init(), mode: .live)
+    }
+
+    @usableFromInline
+    static var testValue: Witness.Context { liveValue }
 }
 
 // MARK: - Current Access

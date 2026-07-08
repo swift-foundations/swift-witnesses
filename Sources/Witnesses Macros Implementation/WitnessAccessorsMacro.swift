@@ -78,7 +78,9 @@ private struct AccessorClosureProperty {
     let isThrowing: Bool
     let throwsType: TypeSyntax?
     let returnType: TypeSyntax
+}
 
+extension AccessorClosureProperty {
     var methodName: String {
         if name.hasPrefix("_") {
             return String(name.dropFirst())
@@ -205,7 +207,9 @@ private func generateStaticAccessor(
 enum WitnessAccessorsDiagnostic: String, DiagnosticMessage {
     case requiresStruct
     case noClosureProperties
+}
 
+extension WitnessAccessorsDiagnostic {
     var message: String {
         switch self {
         case .requiresStruct:

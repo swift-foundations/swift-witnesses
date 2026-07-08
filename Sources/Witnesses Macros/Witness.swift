@@ -43,43 +43,45 @@ extension Witness {
         public init(rawValue: UInt8) {
             self.rawValue = rawValue
         }
-
-        /// Generate a `mock()` method that takes return values instead of closures.
-        ///
-        /// For Void-returning closures, the parameter has a default value of `()`.
-        /// For non-Void closures, you must provide the return value.
-        ///
-        /// ```swift
-        /// @Witness(.mock)
-        /// struct API: Sendable {
-        ///     var fetchUser: (_ id: Int) async throws -> User
-        ///     var deleteUser: (_ id: Int) async throws -> Void
-        /// }
-        ///
-        /// // Usage - provide values, not closures:
-        /// let api = API.mock(fetchUser: testUser)  // deleteUser defaults to ()
-        /// ```
-        public static let mock = Self(rawValue: 1 << 0)
-
-        /// Generate `callAsFunction()` forwarding and `constant(_:)` static method.
-        ///
-        /// Use this for single-closure "generator" witnesses like Date or UUID:
-        ///
-        /// ```swift
-        /// @Witness(.generator)
-        /// struct DateGenerator: Sendable {
-        ///     var now: @Sendable () -> Date
-        /// }
-        ///
-        /// // Generates:
-        /// // func callAsFunction() -> Date { now() }
-        /// // static func constant(_ value: Date) -> Self { .init(now: { value }) }
-        ///
-        /// let generator = DateGenerator.constant(Date(timeIntervalSince1970: 0))
-        /// print(generator())  // 1970-01-01
-        /// ```
-        public static let generator = Self(rawValue: 1 << 1)
     }
+}
+
+extension Witness.Derive {
+    /// Generate a `mock()` method that takes return values instead of closures.
+    ///
+    /// For Void-returning closures, the parameter has a default value of `()`.
+    /// For non-Void closures, you must provide the return value.
+    ///
+    /// ```swift
+    /// @Witness(.mock)
+    /// struct API: Sendable {
+    ///     var fetchUser: (_ id: Int) async throws -> User
+    ///     var deleteUser: (_ id: Int) async throws -> Void
+    /// }
+    ///
+    /// // Usage - provide values, not closures:
+    /// let api = API.mock(fetchUser: testUser)  // deleteUser defaults to ()
+    /// ```
+    public static let mock = Self(rawValue: 1 << 0)
+
+    /// Generate `callAsFunction()` forwarding and `constant(_:)` static method.
+    ///
+    /// Use this for single-closure "generator" witnesses like Date or UUID:
+    ///
+    /// ```swift
+    /// @Witness(.generator)
+    /// struct DateGenerator: Sendable {
+    ///     var now: @Sendable () -> Date
+    /// }
+    ///
+    /// // Generates:
+    /// // func callAsFunction() -> Date { now() }
+    /// // static func constant(_ value: Date) -> Self { .init(now: { value }) }
+    ///
+    /// let generator = DateGenerator.constant(Date(timeIntervalSince1970: 0))
+    /// print(generator())  // 1970-01-01
+    /// ```
+    public static let generator = Self(rawValue: 1 << 1)
 }
 
 /// Generates protocol witness infrastructure for a struct with closure properties.

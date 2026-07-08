@@ -61,40 +61,42 @@ extension Witness {
             self.values = Witness.Context.current
         }
 
-        /// Executes a synchronous operation with the captured witness context.
-        ///
-        /// This method consumes the scope, ensuring it can only be used once.
-        ///
-        /// - Parameter operation: The operation to execute.
-        /// - Returns: The result of the operation.
-        /// - Throws: The typed error from the operation.
-        @inlinable
-        public consuming func run<R, E: Swift.Error>(
-            _ operation: () throws(E) -> R
-        ) throws(E) -> R {
-            consumed = true
-            return try Witness.Context.with({ $0 = values }, operation: operation)
-        }
-
-        /// Executes an asynchronous operation with the captured witness context.
-        ///
-        /// This method consumes the scope, ensuring it can only be used once.
-        ///
-        /// - Parameter operation: The async operation to execute.
-        /// - Returns: The result of the operation.
-        /// - Throws: The typed error from the operation.
-        @inlinable
-        nonisolated(nonsending)
-            public consuming func run<R, E: Swift.Error>(
-                _ operation: nonisolated(nonsending) () async throws(E) -> R
-            ) async throws(E) -> R
-        {
-            consumed = true
-            return try await Witness.Context.with({ $0 = values }, operation: operation)
-        }
-
         deinit {
             precondition(consumed, "Witness.Scope was never used. Call run(_:) to execute with the captured context.")
         }
+    }
+}
+
+extension Witness.Scope {
+    /// Executes a synchronous operation with the captured witness context.
+    ///
+    /// This method consumes the scope, ensuring it can only be used once.
+    ///
+    /// - Parameter operation: The operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    @inlinable
+    public consuming func run<R, E: Swift.Error>(
+        _ operation: () throws(E) -> R
+    ) throws(E) -> R {
+        consumed = true
+        return try Witness.Context.with({ $0 = values }, operation: operation)
+    }
+
+    /// Executes an asynchronous operation with the captured witness context.
+    ///
+    /// This method consumes the scope, ensuring it can only be used once.
+    ///
+    /// - Parameter operation: The async operation to execute.
+    /// - Returns: The result of the operation.
+    /// - Throws: The typed error from the operation.
+    @inlinable
+    nonisolated(nonsending)
+        public consuming func run<R, E: Swift.Error>(
+            _ operation: nonisolated(nonsending) () async throws(E) -> R
+        ) async throws(E) -> R
+    {
+        consumed = true
+        return try await Witness.Context.with({ $0 = values }, operation: operation)
     }
 }

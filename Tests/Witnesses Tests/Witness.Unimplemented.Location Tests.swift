@@ -14,17 +14,19 @@ import Testing
 
 @testable import Witnesses
 
-@Suite("Source.Location")
-struct WitnessUnimplementedLocationTests {
-    @Suite struct Unit {}
-    @Suite struct EdgeCase {}
-    @Suite struct Integration {}
-    @Suite(.serialized) struct Performance {}
+extension Source.Location {
+    @Suite("Source.Location")
+    struct Test {
+        @Suite struct Unit {}
+        @Suite struct EdgeCase {}
+        @Suite struct Integration {}
+        @Suite(.serialized) struct Performance {}
+    }
 }
 
 // MARK: - Unit Tests
 
-extension WitnessUnimplementedLocationTests.Unit {
+extension Source.Location.Test.Unit {
     @Test
     func `Location stores fileID, filePath, line, and column`() {
         let location = Source.Location(
@@ -71,7 +73,7 @@ extension WitnessUnimplementedLocationTests.Unit {
 
 // MARK: - Edge Case Tests
 
-extension WitnessUnimplementedLocationTests.EdgeCase {
+extension Source.Location.Test.EdgeCase {
     @Test
     func `Location with empty fileID`() {
         let location = Source.Location(
@@ -128,7 +130,7 @@ extension WitnessUnimplementedLocationTests.EdgeCase {
 
 // MARK: - Integration Tests
 
-extension WitnessUnimplementedLocationTests.Integration {
+extension Source.Location.Test.Integration {
     @Test
     func `Location equality`() {
         let loc1 = Source.Location(
@@ -180,7 +182,7 @@ extension WitnessUnimplementedLocationTests.Integration {
 
 // MARK: - Performance Tests
 
-extension WitnessUnimplementedLocationTests.Performance {
+extension Source.Location.Test.Performance {
     @Test
     func `Location creation`() {
         // Warmup

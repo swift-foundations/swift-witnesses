@@ -57,6 +57,9 @@ struct UniqueHandle: ~Copyable, Sendable {
 /// for `liveValue`, `testValue`, and `previewValue` — the protocol defaults
 /// are constrained to `where Value: Copyable`.
 struct HandleProvider: Witness.Key, Sendable {
+}
+
+extension HandleProvider {
     typealias Value = UniqueHandle
 
     static var liveValue: UniqueHandle { UniqueHandle(id: 1) }
@@ -66,6 +69,9 @@ struct HandleProvider: Witness.Key, Sendable {
 
 /// A second ~Copyable key to test multi-key independence.
 struct TokenProvider: Witness.Key, Sendable {
+}
+
+extension TokenProvider {
     typealias Value = UniqueHandle
 
     static var liveValue: UniqueHandle { UniqueHandle(id: 1000) }
@@ -129,6 +135,9 @@ enum CustomError: Swift.Error, Sendable { case failed }
 // MARK: - Nested Type Fixture
 
 enum APINamespace {
+}
+
+extension APINamespace {
     @Witness
     struct Client: Sendable {
         var fetch: @Sendable (_ id: Int) throws(Witness.Unimplemented.Error) -> String

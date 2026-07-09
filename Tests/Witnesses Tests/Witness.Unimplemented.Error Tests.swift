@@ -219,10 +219,10 @@ extension Witness.Unimplemented.Error.Test.Integration {
     func `Error can be caught and rethrown`() async throws {
         let api = TestAPI.unimplemented()
 
-        do {
+        do throws(Witness.Unimplemented.Error) {
             _ = try await api.fetch(id: 1)
             Issue.record("Expected error")
-        } catch let error as Witness.Unimplemented.Error {
+        } catch {
             // Can be rethrown
             func rethrowError() throws(Witness.Unimplemented.Error) {
                 throw error

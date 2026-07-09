@@ -47,10 +47,10 @@ extension Witness.Unimplemented.Test.Unit {
     func `Macro-generated unimplemented error contains correct info`() async throws {
         let api = TestAPI.unimplemented()
 
-        do {
+        do throws(Witness.Unimplemented.Error) {
             _ = try await api.fetch(id: 1)
             Issue.record("Expected error to be thrown")
-        } catch let error as Witness.Unimplemented.Error {
+        } catch {
             #expect(error.witness == "TestAPI")
             #expect(error.operation == "fetch(id:)")
         }
@@ -82,12 +82,14 @@ extension Witness.Unimplemented.Test.EdgeCase {
         let api1 = TestAPI.unimplemented()
         let api2 = TestAPI.unimplemented()
 
-        do {
+        do throws(Witness.Unimplemented.Error) {
             _ = try await api1.fetch(id: 1)
-        } catch let error1 as Witness.Unimplemented.Error {
-            do {
+        } catch {
+            let error1 = error
+            do throws(Witness.Unimplemented.Error) {
                 _ = try await api2.fetch(id: 1)
-            } catch let error2 as Witness.Unimplemented.Error {
+            } catch {
+                let error2 = error
                 // Both errors should have the same witness and operation
                 #expect(error1.witness == error2.witness)
                 #expect(error1.operation == error2.operation)
@@ -513,7 +515,7 @@ extension Witness.Unimplemented.Test.Unit {
         let api = TestAPI.unimplemented()
 
         // If typed throws is preserved, this do/catch compiles with typed error
-        do {
+        do throws(Witness.Unimplemented.Error) {
             _ = try await api.fetch(id: 1)
         } catch {
             // error should be Witness.Unimplemented.Error, not any Error

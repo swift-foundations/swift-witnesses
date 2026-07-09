@@ -74,7 +74,7 @@ extension Witness.Preparation.Store {
     ///
     /// - Parameter key: The key type to look up.
     /// - Returns: The prepared value, or `nil` if not prepared.
-    public func get<K: Witness.Key>(_ key: K.Type) -> K.Value? where K.Value: Copyable {
+    public func get<K: Witness.Key.Test>(_ key: K.Type) -> K.Value? where K.Value: Copyable {
         lock.withLock { _ in
             let id = ObjectIdentifier(K.self)
             guard let ptr = unsafe storage[id] else {
@@ -94,7 +94,7 @@ extension Witness.Preparation.Store {
     ///   - key: The key type to look up.
     ///   - body: A closure that receives a borrow of the prepared value.
     /// - Returns: The result of `body`, or `nil` if no value is prepared.
-    public func withValue<K: Witness.Key, R>(
+    public func withValue<K: Witness.Key.Test, R>(
         _ key: K.Type,
         _ body: (borrowing K.Value) -> R
     ) -> R? {
@@ -114,7 +114,7 @@ extension Witness.Preparation.Store {
     /// - Parameters:
     ///   - key: The key type.
     ///   - value: The value to store.
-    public func set<K: Witness.Key>(_ key: K.Type, value: consuming K.Value) {
+    public func set<K: Witness.Key.Test>(_ key: K.Type, value: consuming K.Value) {
         // Box and retain before entering the lock — consuming moves happen here.
         let ptr = unsafe UnsafeRawPointer(
             Unmanaged.passRetained(Ownership.Immutable(value)).toOpaque()
@@ -136,7 +136,7 @@ extension Witness.Preparation.Store {
     /// - Parameter key: The key type.
     /// - Returns: The removed value, or `nil` if not present.
     @discardableResult
-    public func remove<K: Witness.Key>(_ key: K.Type) -> K.Value? where K.Value: Copyable {
+    public func remove<K: Witness.Key.Test>(_ key: K.Type) -> K.Value? where K.Value: Copyable {
         lock.withLock { _ in
             let id = ObjectIdentifier(K.self)
             guard let ptr = unsafe storage.removeValue(forKey: id) else {

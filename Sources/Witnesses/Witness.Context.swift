@@ -128,6 +128,20 @@ extension Witness.Context {
         _current.values.value(for: key, mode: _current.mode)
     }
 
+    /// Gets the current value for a test-only key.
+    ///
+    /// Resolves via the current context's mode. Test-only keys provide no
+    /// `liveValue`; `.live` mode falls back to `testValue`.
+    ///
+    /// - Note: When `K` also conforms to `Witness.Key`, the more specific
+    ///   `Witness.Key` subscript is selected by overload resolution.
+    ///
+    /// - Parameter key: The test key type to look up.
+    /// - Returns: The resolved value for the key.
+    public static subscript<K: Witness.Key.Test>(key: K.Type) -> K.Value where K.Value: Copyable {
+        _current.values.value(for: key, mode: _current.mode)
+    }
+
     /// Gets the current value for an L1-only dependency key.
     ///
     /// Delegates to `Witness.Values`'s L1-key subscript, which checks

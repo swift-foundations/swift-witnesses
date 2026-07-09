@@ -149,6 +149,42 @@ extension Witness.Values {
         }
     }
 
+    /// Accesses the witness for a test-only key type using the specified mode.
+    ///
+    /// Mirrors ``value(for:mode:)`` for keys that provide only `testValue`
+    /// (and an optional `previewValue`) without a `liveValue`. Because no live
+    /// implementation exists, `.live` mode resolves to `testValue`.
+    ///
+    /// - Parameters:
+    ///   - key: The test key type identifying the witness.
+    ///   - mode: The execution mode determining default value selection.
+    /// - Returns: The stored witness, or the key's default value based on mode.
+    @usableFromInline
+    internal func value<K: Witness.Key.Test>(for key: K.Type, mode: Witness.Context.Mode) -> K.Value where K.Value: Copyable {
+        let id = ObjectIdentifier(K.self)
+
+        // 1. Check explicit overrides
+        if let ptr = unsafe _storage.dict[id] {
+            return unsafe Unmanaged<Ownership.Immutable<K.Value>>.fromOpaque(ptr)
+                .takeUnretainedValue()
+                .value
+        }
+
+        // 2. Check prepared values
+        if let prepared = _preparedRef?.get(K.self) {
+            return prepared
+        }
+
+        // 3. Return default based on mode (no liveValue for test-only keys)
+        switch mode {
+        case .live, .test:
+            return K.testValue
+
+        case .preview:
+            return K.previewValue
+        }
+    }
+
     /// Accesses the witness for the given key type via closure-scoped borrow.
     ///
     /// Works for all value types including `~Copyable`. Handles all three lookup
@@ -200,6 +236,37 @@ extension Witness.Values {
     public subscript<K: Witness.Key>(key: K.Type) -> K.Value where K.Value: Copyable {
         get {
             value(for: key, mode: .live)
+        }
+        set {
+            _ensureUnique()
+            let id = ObjectIdentifier(K.self)
+            // Release old value if present
+            if let oldPtr = unsafe _storage.dict[id] {
+                unsafe Unmanaged<AnyObject>.fromOpaque(oldPtr).release()
+            }
+            // Store new value (retained)
+            let box = Ownership.Immutable(newValue)
+            let ptr = unsafe UnsafeRawPointer(Unmanaged.passRetained(box).toOpaque())
+            unsafe _storage.set(ptr, for: id)
+        }
+    }
+
+    /// Accesses the witness for a test-only key type.
+    ///
+    /// For keys that provide only `testValue` (per ``Witness/Key/Test``), the
+    /// getter resolves in `.test` mode; there is no `liveValue` fallback. The
+    /// setter stores an explicit override, consistent with the `Witness.Key`
+    /// subscript.
+    ///
+    /// - Note: When `K` also conforms to `Witness.Key`, the more specific
+    ///   `Witness.Key` subscript is selected by overload resolution.
+    ///
+    /// - Parameter key: The test key type identifying the witness.
+    /// - Returns: The stored witness, or the key's `testValue` if not set.
+    @inlinable
+    public subscript<K: Witness.Key.Test>(key: K.Type) -> K.Value where K.Value: Copyable {
+        get {
+            value(for: key, mode: .test)
         }
         set {
             _ensureUnique()

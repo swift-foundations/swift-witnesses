@@ -30,16 +30,16 @@ enum KeywordCalls: Sendable {
     case `return`(value: String)
 }
 
-extension Witness {
+extension Witness.Test {
     @Suite
-    struct EnumTest {
+    struct Enum {
         @Suite struct Unit {}
     }
 }
 
 // MARK: - Unit Tests
 
-extension Witness.EnumTest.Unit {
+extension Witness.Test.Enum.Unit {
     @Test
     func `Computed property extracts Void for parameterless case`() {
         let action = TestCalls.load

@@ -132,6 +132,28 @@ struct IntGenerator: Sendable {
 
 enum CustomError: Swift.Error, Sendable { case failed }
 
+// MARK: - Throws-Shape Matrix Fixture
+
+/// Witness exercising every throwing shape a closure field can take, pinning the
+/// macro's derived failure type for the generated `Result` / `Outcome`:
+///
+/// - untyped `throws` → `any Swift.Error` (the regression: previously derived
+///   `Never`, which made generated `Result<T, Never>.failure(error)` fail to
+///   compile in observe code — `any Error` is not convertible to `Never`)
+/// - typed `throws(E)` → `E`
+/// - non-throwing → `Never`
+///
+/// Covered across both sync and async. Merely compiling this fixture exercises
+/// the observe-body codegen for the untyped-throws case.
+@Witness
+struct ThrowsMatrixAPI: Sendable {
+    var bareSync: @Sendable () throws -> Int
+    var bareAsync: @Sendable (_ id: Int) async throws -> String
+    var typedSync: @Sendable () throws(CustomError) -> Int
+    var typedAsync: @Sendable (_ id: Int) async throws(CustomError) -> String
+    var nonThrowing: @Sendable () -> Int
+}
+
 // MARK: - Nested Type Fixture
 
 enum APINamespace {

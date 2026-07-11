@@ -576,6 +576,43 @@ extension ClosureProperty {
         }
     }
 
+    /// The derived failure type for `Result` / `Outcome` wrappers, distinguishing
+    /// all three throwing states of the closure field:
+    ///
+    /// - non-throwing → `Never`
+    /// - untyped `throws` → `any Swift.Error`
+    /// - typed `throws(E)` → `E`
+    ///
+    /// `throwsType` alone is nil for BOTH the non-throwing and the untyped-throwing
+    /// cases; only combined with `isThrowing` can the two be distinguished. Defaulting
+    /// a nil `throwsType` straight to `Never` conflates them and makes untyped-throws
+    /// witnesses emit `Result<T, Never>.failure(error)`, which cannot compile
+    /// (`any Error` is not convertible to `Never`).
+    var derivedFailureType: String {
+        if let throwsType {
+            return throwsType.trimmedDescription
+        }
+        return isThrowing ? "any Swift.Error" : "Never"
+    }
+
+    /// The `do` clause emitted on the observe catch-path, mirroring the source
+    /// field's own throwing shape:
+    ///
+    /// - typed `throws(E)` → `do throws(E) ` (so the caught `error` binds as `E`)
+    /// - untyped `throws` → `do ` (plain; the caught `error` binds as `any Error`)
+    ///
+    /// The bare case deliberately emits a plain `do` rather than
+    /// `do throws(any Swift.Error)`: putting an existential-throws clause into
+    /// generated code would violate the institute's no-existential-throws rule
+    /// ([API-ERR-006]). Plain `do` is semantically equivalent and mirrors the
+    /// untyped source field. Trailing space included.
+    var observeDoClause: String {
+        if let throwsType {
+            return "do throws(\(throwsType.trimmedDescription)) "
+        }
+        return "do "
+    }
+
     /// Whether the return type is Void.
     var returnsVoid: Bool {
         let rt = returnType.trimmedDescription
@@ -1089,7 +1126,7 @@ private func generateResultEnum(for properties: [ClosureProperty]) -> String {
 /// e.g., `case fetchUser(Standard_Library_Extensions.Result<String, Witness.Unimplemented.Error>)`
 private func generateTypedResultCase(for property: ClosureProperty) -> String {
     let returnType = property.returnType.trimmedDescription
-    let errorType = property.throwsType?.trimmedDescription ?? "Never"
+    let errorType = property.derivedFailureType
     return "case \(property.methodName)(Standard_Library_Extensions.Result<\(returnType), \(errorType)>)"
 }
 
@@ -1393,7 +1430,7 @@ private func generateObserveBody(
     let actionConstruction = formatCallsConstruction(for: property)
     let returnType = property.returnType.trimmedDescription
     let hasReturn = !property.returnsVoid
-    let errorType = property.throwsType?.trimmedDescription ?? "Never"
+    let errorType = property.derivedFailureType
     let witnessResultType = "Standard_Library_Extensions.Result<\(returnType), \(errorType)>"
 
     let beforeCall: String
@@ -1446,10 +1483,9 @@ private func generateObserveBody(
                                     \(afterCall)(__outcome)
                 """
         }
-        let doThrowsType = property.throwsType?.trimmedDescription ?? "any Error"
         return """
                             let action: Calls = \(actionConstruction)
-                            \(beforeLine)do throws(\(doThrowsType)) {
+                            \(beforeLine)\(property.observeDoClause){
                                 \(hasReturn ? "let result = " : "")try \(property.awaitPrefix)\(callExpression)
                                 \(successBody)
                             } catch {

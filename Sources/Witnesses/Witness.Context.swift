@@ -131,7 +131,10 @@ extension Witness.Context {
     /// Gets the current value for a test-only key.
     ///
     /// Resolves via the current context's mode. Test-only keys provide no
-    /// `liveValue`; `.live` mode falls back to `testValue`.
+    /// `liveValue`; `.live` mode falls back to `testValue` — LOUDLY, via
+    /// ``Witness/Diagnostics/testDefaultServedInLive(_:)`` (DEBUG traps;
+    /// RELEASE reports once per key and serves the default;
+    /// `DEPENDENCIES_STRICT=1` traps in release).
     ///
     /// - Note: When `K` also conforms to `Witness.Key`, the more specific
     ///   `Witness.Key` subscript is selected by overload resolution.

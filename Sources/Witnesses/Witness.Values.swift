@@ -153,7 +153,9 @@ extension Witness.Values {
     ///
     /// Mirrors ``value(for:mode:)`` for keys that provide only `testValue`
     /// (and an optional `previewValue`) without a `liveValue`. Because no live
-    /// implementation exists, `.live` mode resolves to `testValue`.
+    /// implementation exists, `.live` mode resolves to `testValue` — LOUDLY,
+    /// via ``Witness/Diagnostics/testDefaultServedInLive(_:)`` (DEBUG traps;
+    /// RELEASE reports once per key and serves the default).
     ///
     /// - Parameters:
     ///   - key: The test key type identifying the witness.
@@ -177,7 +179,15 @@ extension Witness.Values {
 
         // 3. Return default based on mode (no liveValue for test-only keys)
         switch mode {
-        case .live, .test:
+        case .live:
+            // §4.2 tripwire (di-composition-root-design.md): a test default
+            // resolving in a live context is LOUD — DEBUG traps; RELEASE
+            // reports once per key to stderr and serves the default;
+            // DEPENDENCIES_STRICT=1 traps in release.
+            Witness.Diagnostics.testDefaultServedInLive(K.self)
+            return K.testValue
+
+        case .test:
             return K.testValue
 
         case .preview:

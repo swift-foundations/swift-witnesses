@@ -13,7 +13,19 @@
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
-import Glibc
+// Glibc declares `stderr` as a mutable global (`extern FILE *`), which Swift 6
+// data-race checking rejects at the reference site. The stream pointer is never
+// reassigned, `fputs` locks the stream internally, and the only write path here
+// is already serialized behind `reported`'s Mutex — `@preconcurrency` is the
+// established institute shape for this (swift-console, Console.Output.swift).
+@preconcurrency import Glibc
+#elseif canImport(Musl)
+// Same mutable-global `stderr` shape as Glibc.
+@preconcurrency import Musl
+#elseif os(Windows)
+// CRT vends `getenv`/`fputs` and `stderr` (as a computed accessor over
+// `__acrt_iob_func`), so no `@preconcurrency` is needed on this branch.
+import CRT
 #endif
 import Synchronization
 import Witness_Primitives

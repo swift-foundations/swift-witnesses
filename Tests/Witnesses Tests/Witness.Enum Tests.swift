@@ -32,7 +32,7 @@ enum KeywordCalls: Sendable {
 
 extension Witness.Test {
     @Suite
-    struct Enum {
+    struct `Enum` {
         @Suite struct Unit {}
     }
 }

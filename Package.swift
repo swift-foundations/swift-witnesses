@@ -33,6 +33,7 @@ let package = Package(
         .package(url: "https://github.com/swift-primitives/swift-optic-primitives.git", branch: "main"),
         .package(url: "https://github.com/swift-primitives/swift-finite-primitives.git", branch: "main"),
         .package(url: "https://github.com/swift-primitives/swift-ownership-primitives.git", branch: "main"),
+        .package(url: "https://github.com/swift-primitives/swift-dependency-primitives.git", branch: "main"),
     ],
     targets: [
         .target(
@@ -42,6 +43,7 @@ let package = Package(
                 .product(name: "Witness Primitives", package: "swift-witness-primitives"),
                 .product(name: "Source Primitives", package: "swift-source-primitives"),
                 .product(name: "Ownership Primitives", package: "swift-ownership-primitives"),
+                .product(name: "Dependency Primitives", package: "swift-dependency-primitives"),
             ]
         ),
         .target(
